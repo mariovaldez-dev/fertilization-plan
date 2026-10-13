@@ -568,9 +568,7 @@ final class PlanWizard extends Component
 
             $this->savedPlanCode = $planCode !== null ? (string) $planCode : null;
             $this->savedPlanMessage = $planMessage ?: ($this->savedPlanCode ? "{$this->savedPlanCode} - Plan {$this->parcela} - {$this->customerCode}" : null);
-            $this->successMessage = $this->savedPlanCode
-                ? "El plan de fertilización ha sido registrado en el sistema con el folio: {$this->savedPlanCode}."
-                : $successMsg;
+            $this->successMessage = 'El plan de fertilización ha sido registrado exitosamente en el sistema.';
 
             // Guardar copia del PDF de propuesta en BD SQL Server vía API
             if ($this->savedPlanCode) {
@@ -754,10 +752,10 @@ final class PlanWizard extends Component
 
             $fileName = sprintf('Plan_Fertilizacion_%s.pdf', $this->customerName ?: 'Cliente');
             $customMessage = sprintf(
-                "🌱 *Plan de Fertilización disponible* 🌱\nHola %s 👋\n\nTe compartimos el Plan de Fertilización del cliente *%s* (Folio: *%s*) para tu revisión y validación técnica.\n\n📄 Adjunto encontrarás el documento con las recomendaciones agronómicas.\n\n¡Gracias por tu apoyo! 🌾",
-                $this->advisorName ?: 'Asesor',
-                $this->customerName ?: 'Cliente',
-                $this->savedPlanCode ?? 'N/A'
+                "🌱 *Plan de Fertilización disponible* 🌱\nHola %s 👋\n\nTe compartimos tu Plan de Fertilización (Folio: *%s*) para el predio *%s* con las recomendaciones agronómicas calculadas.\n\n📄 Adjunto encontrarás el documento en formato PDF.\n\n¡Gracias por tu confianza! 🌾",
+                $this->customerName ?: 'Productor',
+                $this->savedPlanCode ?? 'N/A',
+                $this->parcela ?: 'Lote'
             );
 
             $dto = new WhatsAppMessageDTO(
@@ -771,7 +769,7 @@ final class PlanWizard extends Component
             $result = $whatsAppUseCase->execute($dto);
 
             if (! empty($result['success'])) {
-                $this->whatsAppSuccess = $result['message'] ?? '¡Plan enviado al asesor técnico por WhatsApp exitosamente!';
+                $this->whatsAppSuccess = $result['message'] ?? '¡Plan enviado por WhatsApp exitosamente!';
 
                 if ($this->savedPlanCode) {
                     $planRepository->savePlanPdf(

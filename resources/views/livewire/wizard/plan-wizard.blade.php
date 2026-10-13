@@ -111,19 +111,18 @@
                     </div>
                 @endif
 
-                <!-- Tarjeta de Contacto Asesor para WhatsApp -->
-                <div class="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 text-left space-y-2">
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-gray-500 dark:text-gray-400 font-medium">Asesor Técnico:</span>
-                        <span class="font-bold text-gray-800 dark:text-gray-200">{{ $advisorName ?: 'Sin asignar' }}</span>
-                    </div>
+                <!-- Campo de Envío por WhatsApp -->
+                <div class="p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 text-left space-y-1.5">
+                    <label class="block text-xs font-bold text-gray-600 dark:text-gray-400">
+                        Número de WhatsApp (opcional):
+                    </label>
                     <div class="flex items-center gap-2">
-                        <span class="text-xs text-gray-400 shrink-0"><i class="fa-solid fa-phone"></i></span>
+                        <span class="text-emerald-500 text-sm shrink-0"><i class="fa-brands fa-whatsapp"></i></span>
                         <input 
                             type="text" 
                             wire:model="advisorPhone" 
                             placeholder="Celular para WhatsApp (10 dígitos)" 
-                            class="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#1A2227] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                            class="w-full px-3 py-2 text-xs bg-white dark:bg-[#1A2227] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
                         />
                     </div>
                 </div>
