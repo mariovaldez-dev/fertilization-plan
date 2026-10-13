@@ -74,6 +74,10 @@ final class HttpFertilizationPlanRepository implements FertilizationPlanReposito
                 'temporada' => $filter->season,
             ]);
 
+            if ($response->status() === 404) {
+                return ['data' => [], 'total' => 0, 'page' => $filter->page, 'limit' => $filter->limit];
+            }
+
             if (! $response->successful()) {
                 Log::warning('[HttpFertilizationPlanRepository] Error fetching plans', ['status' => $response->status()]);
 
@@ -88,25 +92,26 @@ final class HttpFertilizationPlanRepository implements FertilizationPlanReposito
 
             $plans = [];
             foreach ($decoded as $item) {
-                $statusStr = $item['Estado'] ?? $item['Status'] ?? 'Activo';
-                $status = match ($statusStr) {
-                    'Borrador' => PlanStatusEnum::DRAFT,
-                    'Cerrado' => PlanStatusEnum::CLOSED,
-                    'Cancelado' => PlanStatusEnum::CANCELLED,
+                $statusStr = $item['U_Status'] ?? $item['Estado'] ?? $item['Status'] ?? '1';
+                $status = match ((string) $statusStr) {
+                    '1', 'Activo' => PlanStatusEnum::ACTIVE,
+                    '0', 'Borrador' => PlanStatusEnum::DRAFT,
+                    '2', 'Cerrado' => PlanStatusEnum::CLOSED,
+                    '3', 'Cancelado' => PlanStatusEnum::CANCELLED,
                     default => PlanStatusEnum::ACTIVE,
                 };
 
                 $plans[] = new FertilizationPlan(
-                    planCode: (string) ($item['PlanCode'] ?? $item['U_PlanCode'] ?? ''),
-                    version: (int) ($item['Version'] ?? $item['U_Version'] ?? 1),
+                    planCode: (string) ($item['Code'] ?? $item['PlanCode'] ?? $item['U_PlanCode'] ?? ''),
+                    version: (int) ($item['U_Version'] ?? $item['Version'] ?? 1),
                     customerCode: (string) ($item['CardCode'] ?? $customerCode),
-                    customerName: (string) ($item['CardName'] ?? ''),
+                    customerName: (string) ($item['Name'] ?? $item['CardName'] ?? ''),
                     advisorId: (string) ($item['SlpCode'] ?? $item['AdvisorId'] ?? ''),
                     advisorName: (string) ($item['SlpName'] ?? $item['AdvisorName'] ?? ''),
                     zone: (string) ($item['Zona'] ?? ''),
-                    territory: (string) ($item['Territorio'] ?? ''),
+                    territory: (string) ($item['Territorio'] ?? $item['U_TerritorioId'] ?? ''),
                     season: (string) ($item['Temporada'] ?? ''),
-                    hectares: (float) ($item['Hectareas'] ?? $item['U_Hectareas'] ?? 1.0),
+                    hectares: (float) ($item['U_Superficie'] ?? $item['Hectareas'] ?? $item['U_Hectareas'] ?? 1.0),
                     soilType: (string) ($item['TipoSuelo'] ?? ''),
                     latitude: isset($item['Latitud']) ? (float) $item['Latitud'] : null,
                     longitude: isset($item['Longitud']) ? (float) $item['Longitud'] : null,
@@ -115,9 +120,9 @@ final class HttpFertilizationPlanRepository implements FertilizationPlanReposito
                     hasTestigo: (bool) ($item['LlevaTestigo'] ?? false),
                     previousCrop: $item['CultivoAnterior'] ?? null,
                     previousCropYield: isset($item['RendimientoAnterior']) ? (float) $item['RendimientoAnterior'] : null,
-                    currentCropCode: $item['CultivoActualCode'] ?? null,
-                    currentCropName: $item['CultivoActual'] ?? null,
-                    estimatedSowingDate: $item['FechaSiembra'] ?? null,
+                    currentCropCode: (string) ($item['U_Code_Cultivo'] ?? $item['CultivoActualCode'] ?? ''),
+                    currentCropName: $item['nombrecultivo'] ?? $item['CultivoActual'] ?? null,
+                    estimatedSowingDate: $item['U_Fecha_Siembra'] ?? $item['FechaSiembra'] ?? null,
                     targetYield: isset($item['MetaRendimiento']) ? (float) $item['MetaRendimiento'] : null,
                     status: $status,
                     createdAt: isset($item['CreateDate']) ? Carbon::parse((string) $item['CreateDate']) : Carbon::now(),
@@ -609,8 +614,34 @@ final class HttpFertilizationPlanRepository implements FertilizationPlanReposito
     public function saveTracking(UpdateTrackingDTO $dto): array
     {
         try {
+            $rawRecords = $dto->getRecords();
+            $formattedStages = [];
+
+            foreach ($rawRecords as $st) {
+                $prods = [];
+                foreach ($st['productos'] ?? [] as $p) {
+                    $isImpulsora = ($p['tipo'] ?? 'impulsora') === 'impulsora';
+                    $prods[] = [
+                        'id' => $isImpulsora ? ($p['idProducto'] ?? $p['id'] ?? '') : ($p['nombreProducto'] ?? $p['id'] ?? ''),
+                        'dosis' => (float) ($p['dosis'] ?? $p['dosisReal'] ?? 0.0),
+                        'Precio' => (float) ($p['Precio'] ?? $p['precio'] ?? 0.0),
+                        'Proveedor' => $isImpulsora ? 'GRUPO IMPULSORA' : (string) ($p['Proveedor'] ?? $p['proveedor'] ?? ''),
+                        'tipo' => $p['tipo'] ?? ($isImpulsora ? 'impulsora' : 'otros'),
+                    ];
+                }
+
+                $formattedStages[] = [
+                    'codeEtapa' => (int) ($st['codeEtapa'] ?? $st['idEtapa'] ?? 0),
+                    'nameEtapa' => (string) ($st['nameEtapa'] ?? $st['nombreEtapa'] ?? ''),
+                    'fechaAplicacion' => (string) ($st['fechaAplicacion'] ?? date('Y-m-d')),
+                    'idAplicacion' => isset($st['idAplicacion']) && $st['idAplicacion'] !== '' ? (int) $st['idAplicacion'] : (isset($st['idMetodo']) && $st['idMetodo'] !== '' ? (int) $st['idMetodo'] : 1),
+                    'comentario' => (string) ($st['comentario'] ?? $st['comentarios'] ?? ''),
+                    'productos' => $prods,
+                ];
+            }
+
             $response = $this->client()->post("/planes-cliente/{$dto->planCode}/seguimiento", [
-                'etapas' => $dto->records,
+                'etapas' => $formattedStages,
             ]);
 
             if ($response->successful()) {
@@ -636,10 +667,36 @@ final class HttpFertilizationPlanRepository implements FertilizationPlanReposito
     public function captureResults(CaptureResultDTO $dto): array
     {
         try {
+            $formattedYield = number_format(min($dto->finalYieldTonPerHa, 99.9), 1, '.', '');
+            $formattedCostTotal = number_format($dto->costPerHectare, 2, '.', '');
+            $formattedCostTrad = number_format($dto->traditionalCost, 2, '.', '');
+            $formattedDose = number_format($dto->dose, 2, '.', '');
+            $formattedYieldTrad = number_format($dto->traditionalYield, 2, '.', '');
+            $formattedPrice = number_format($dto->harvestPrice, 2, '.', '');
+            $formattedExtraProfit = number_format($dto->extraProfit, 2, '.', '');
+            $formattedExtraInvest = number_format($dto->extraInvestment, 2, '.', '');
+            $formattedRoi = number_format($dto->returnOnInvestment, 2, '.', '');
+
+            $coords = $dto->coordinates;
+            if (empty($coords)) {
+                $coords = '25.790466,-108.995888';
+            }
+
             $response = $this->client()->post("/planes-cliente/{$dto->planCode}/guardar-resultados", [
-                'U_Rendimiento' => $dto->actualYield,
-                'U_FechaCosecha' => $dto->harvestDate,
-                'U_Comentarios' => $dto->technicalConclusions,
+                'U_FechaCaptura' => $dto->harvestDate ?? date('Y-m-d'),
+                'U_Rendimiento' => (float) $formattedYield,
+                'U_CostoTotal' => (float) $formattedCostTotal,
+                'U_Costo_Trad' => (float) $formattedCostTrad,
+                'U_Dosis' => (float) $formattedDose,
+                'U_Rendimiento_Trad' => (float) $formattedYieldTrad,
+                'U_Precio_Cosecha' => (float) $formattedPrice,
+                'U_Utilidad_Ext' => (float) $formattedExtraProfit,
+                'U_Inversion_Ext' => (float) $formattedExtraInvest,
+                'U_Retorno_Inv' => (float) $formattedRoi,
+                'U_Recomendaciones' => mb_substr($dto->recommendations ?: 'Recomendaciones agronómicas registradas.', 0, 500),
+                'U_Propuesta' => mb_substr($dto->proposal ?: 'Propuesta de fertilización aplicada.', 0, 500),
+                'U_BuenasPracticas' => mb_substr($dto->goodPractices ?: 'Buenas prácticas agrícolas implementadas.', 0, 500),
+                'U_Coordenadas' => mb_substr($coords, 0, 500),
             ]);
 
             if ($response->successful()) {
@@ -738,6 +795,79 @@ final class HttpFertilizationPlanRepository implements FertilizationPlanReposito
             ];
         } catch (Throwable $e) {
             Log::error('[HttpFertilizationPlanRepository] saveResultsPdf error', ['error' => $e->getMessage()]);
+
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function getTrackingStages(string $planCode, int $cropId): array
+    {
+        try {
+            $response = $this->client()->get('/plan-fertilizacion/etapas-seguimiento', [
+                'cultivoId' => $cropId,
+                'planCode' => $planCode,
+            ]);
+
+            if ($response->successful()) {
+                $raw = $response->json();
+                $decoded = $this->decodeNestedJson($raw);
+
+                return $decoded['etapas'] ?? (is_array($decoded) ? $decoded : []);
+            }
+
+            return [];
+        } catch (Throwable $e) {
+            Log::error('[HttpFertilizationPlanRepository] getTrackingStages error', ['error' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    public function getPlanForVersioning(string $planCode): array
+    {
+        try {
+            $response = $this->client()->get("/plan-fertilizacion/busquedaVersionar/{$planCode}");
+
+            if ($response->successful()) {
+                return $this->decodeNestedJson($response->json());
+            }
+
+            return [];
+        } catch (Throwable $e) {
+            Log::error('[HttpFertilizationPlanRepository] getPlanForVersioning error', ['error' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    public function versionPlanFull(string $planCode, array $master, array $stages): array
+    {
+        try {
+            $response = $this->client()->post('/plan-fertilizacion/versionar', [
+                'planCode' => $planCode,
+                'maestro' => $master,
+                'etapas' => $stages,
+            ]);
+
+            if ($response->successful()) {
+                $raw = $response->json();
+                $decoded = $this->decodeNestedJson($raw);
+
+                return [
+                    'success' => ((int) ($decoded['estado'] ?? 0)) === 0,
+                    'message' => $decoded['mensaje'] ?? '¡Nueva versión generada exitosamente!',
+                    'planCode' => (string) ($decoded['planCode'] ?? $planCode),
+                    'version' => (string) ($decoded['version'] ?? '2'),
+                    'newVersion' => (string) ($decoded['version'] ?? '2'),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'message' => $response->json('mensaje') ?? 'Error al versionar plan.',
+            ];
+        } catch (Throwable $e) {
+            Log::error('[HttpFertilizationPlanRepository] versionPlanFull error', ['error' => $e->getMessage()]);
 
             return ['success' => false, 'message' => $e->getMessage()];
         }

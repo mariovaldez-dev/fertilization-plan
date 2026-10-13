@@ -36,4 +36,10 @@ interface FertilizationPlanRepositoryInterface
     public function savePlanPdf(string $planCode, int $version, string $status, string $base64File): array;
 
     public function saveResultsPdf(string $planCode, int $version, string $status, string $base64File): array;
+
+    public function getTrackingStages(string $planCode, int $cropId): array;
+
+    public function getPlanForVersioning(string $planCode): array;
+
+    public function versionPlanFull(string $planCode, array $master, array $stages): array;
 }

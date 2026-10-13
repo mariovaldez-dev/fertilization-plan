@@ -27,10 +27,18 @@
                 </div>
                 <div>
                     <h1 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                        Generar Plan de Fertilización
+                        @if($isVersioning)
+                            Versionar Plan (Base: V{{ $baseVersion }})
+                        @else
+                            Generar Plan de Fertilización
+                        @endif
                     </h1>
                     <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Configuración agronómica por etapas fenológicas y georreferenciación
+                        @if($isVersioning)
+                            Ajuste de propuesta nutricional para generar la versión V{{ $newVersion }} del plan #{{ $basePlanCode }}
+                        @else
+                            Configuración agronómica por etapas fenológicas y georreferenciación
+                        @endif
                     </p>
                 </div>
             </div>

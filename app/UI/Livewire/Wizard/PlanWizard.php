@@ -143,24 +143,164 @@ final class PlanWizard extends Component
 
     public bool $isLoaded = false;
 
+    public bool $isVersioning = false;
+
+    public ?string $basePlanCode = null;
+
+    public int $baseVersion = 1;
+
+    public int $newVersion = 2;
+
     public function setMapImage(string $base64): void
     {
         $this->mapImageBase64 = $base64;
     }
 
-    public function mount(): void
+    public function mount(?string $planCode = null): void
     {
         $this->estimatedSowingDate = null;
+        if (! empty($planCode)) {
+            $this->isVersioning = true;
+            $this->basePlanCode = $planCode;
+        }
     }
 
-    public function loadInitialData(CatalogsRepositoryInterface $catalogs): void
-    {
+    public function loadInitialData(
+        CatalogsRepositoryInterface $catalogs,
+        ?FertilizationPlanRepositoryInterface $planRepo = null
+    ): void {
         $this->zones = $catalogs->getZones();
         $this->soilTypes = $catalogs->getSoilTypes();
         $this->cropTypes = $catalogs->getCropTypes();
         $this->availableProducts = $catalogs->getProducts();
         $this->applicationMethods = $catalogs->getApplicationMethods();
         $this->isLoaded = true;
+
+        if ($this->isVersioning && ! empty($this->basePlanCode)) {
+            $repo = $planRepo ?? app(FertilizationPlanRepositoryInterface::class);
+            $this->loadPlanForVersioning($this->basePlanCode, $repo, $catalogs);
+        }
+    }
+
+    public function loadPlanForVersioning(
+        string $planCode,
+        FertilizationPlanRepositoryInterface $planRepo,
+        CatalogsRepositoryInterface $catalogs
+    ): void {
+        $planData = $planRepo->getPlanForVersioning($planCode);
+
+        if (empty($planData) || empty($planData['maestro'])) {
+            $entity = $planRepo->getPlanByCode($planCode);
+            if ($entity) {
+                $this->customerCode = $entity->customerCode;
+                $this->customerName = $entity->customerName;
+                $this->advisorId = $entity->advisorId;
+                $this->advisorName = $entity->advisorName;
+                $this->zone = $entity->zone;
+                $this->territory = $entity->territory;
+                $this->hectares = $entity->hectares;
+                $this->soilType = $entity->soilType;
+                $this->latitude = $entity->latitude;
+                $this->longitude = $entity->longitude;
+                $this->previousCrop = $entity->previousCrop;
+                $this->previousCropYield = $entity->previousCropYield;
+                $this->currentCropCode = $entity->currentCropCode;
+                $this->currentCropName = $entity->currentCropName;
+                $this->estimatedSowingDate = $entity->estimatedSowingDate;
+                $this->targetYield = $entity->targetYield;
+                $this->baseVersion = $entity->version;
+                $this->newVersion = $this->baseVersion + 1;
+                $this->stages = array_map(function ($s) {
+                    return [
+                        'stageId' => $s->stageId,
+                        'stageName' => $s->stageName,
+                        'applicationMethod' => $s->applicationMethod ?? 'Tradicional',
+                        'applicationDate' => null,
+                        'observations' => '',
+                        'products' => array_map(function ($p) {
+                            return [
+                                'itemCode' => $p->itemCode,
+                                'itemName' => $p->itemName,
+                                'dosePerHectare' => $p->dosePerHectare,
+                                'unitOfMeasure' => $p->unitOfMeasure,
+                                'unitPrice' => $p->unitPrice,
+                                'activeIngredient' => $p->activeIngredient,
+                            ];
+                        }, $s->products),
+                    ];
+                }, $entity->stages);
+                $this->currentStep = 3;
+            }
+
+            return;
+        }
+
+        $m = $planData['maestro'] ?? [];
+        $this->customerCode = (string) ($m['CardCode'] ?? '');
+        $this->customerName = (string) ($m['CardName'] ?? '');
+        $this->parcela = (string) ($m['Parcela'] ?? 'Parcela 1');
+        $this->zone = (string) ($m['U_Zona'] ?? $m['Zona'] ?? '');
+        $this->territory = (string) ($m['U_Territorio'] ?? $m['Territorio'] ?? '');
+        $this->hectares = (float) ($m['Superficie'] ?? $m['U_Superficie'] ?? 1.0);
+        $this->soilType = (string) ($m['CodeTipoSuelo'] ?? $m['U_Code_Tipo_Suelo'] ?? '');
+        $this->advisorId = (string) ($m['IDAsesorAgr'] ?? $m['SlpCode'] ?? '');
+        $this->advisorName = (string) ($m['U_Asesor'] ?? $m['SlpName'] ?? '');
+        $this->advisorPhone = (string) ($m['Cellular'] ?? '');
+        $this->previousCrop = $m['CodeCultAnterior'] ?? null;
+        $this->previousCropYield = isset($m['RendimientoReal']) ? (float) $m['RendimientoReal'] : null;
+        $this->currentCropCode = (string) ($m['CodeCultivo'] ?? $m['U_Code_Cultivo'] ?? '');
+        $this->currentCropName = (string) ($planData['cultivoNombre'] ?? $m['nombrecultivo'] ?? 'Cultivo');
+        $this->estimatedSowingDate = isset($m['FechaSiembra']) ? explode('T', (string) $m['FechaSiembra'])[0] : null;
+        $this->seedVariety = (string) ($m['VariedadSemilla'] ?? '');
+        $this->targetYield = isset($m['ObjetivoProd']) ? (float) $m['ObjetivoProd'] : null;
+        $rawVersion = preg_replace('/\D/', '', (string) ($m['U_Version'] ?? '1'));
+        $this->baseVersion = (int) ($rawVersion ?: 1);
+        $this->newVersion = $this->baseVersion + 1;
+
+        $coordsStr = $m['Coordenadas'] ?? $m['U_Coordenadas'] ?? null;
+        if ($coordsStr && str_contains($coordsStr, ',')) {
+            [$lat, $lng] = explode(',', $coordsStr);
+            $this->latitude = (float) trim($lat);
+            $this->longitude = (float) trim($lng);
+            $this->coordenadasText = sprintf('Lat: %.5f, Lng: %.5f', $this->latitude, $this->longitude);
+        }
+
+        $rawEtapas = $planData['etapas'] ?? [];
+        if (! empty($rawEtapas)) {
+            $this->stages = [];
+            foreach ($rawEtapas as $st) {
+                $prodsRaw = [];
+                if (! empty($st['listaProductos'])) {
+                    $prodsRaw = is_string($st['listaProductos']) ? (json_decode($st['listaProductos'], true) ?: []) : $st['listaProductos'];
+                }
+
+                $mappedProds = [];
+                foreach ($prodsRaw as $pr) {
+                    $pId = (string) ($pr['id'] ?? $pr['itemCode'] ?? '');
+                    $pDose = (float) ($pr['dosis'] ?? $pr['dosePerHectare'] ?? 0.0);
+                    $foundCat = collect($this->availableProducts)->first(fn ($x) => ($x['ItemCode'] ?? $x['itemCode'] ?? '') === $pId);
+                    $mappedProds[] = [
+                        'itemCode' => $pId,
+                        'itemName' => $foundCat['ItemName'] ?? $foundCat['name'] ?? $pId,
+                        'dosePerHectare' => $pDose,
+                        'unitOfMeasure' => $foundCat['SalUnitMsr'] ?? 'Kg/Ha',
+                        'unitPrice' => (float) ($foundCat['Price'] ?? 0.0),
+                        'activeIngredient' => $foundCat['U_Det_IngActivo'] ?? null,
+                    ];
+                }
+
+                $this->stages[] = [
+                    'stageId' => (int) ($st['codeEtapa'] ?? 0),
+                    'stageName' => (string) ($st['nameEtapa'] ?? ''),
+                    'applicationMethod' => isset($st['idAplicacion']) ? (string) $st['idAplicacion'] : 'Tradicional',
+                    'applicationDate' => ! empty($st['fechaAplicacion']) ? explode('T', (string) $st['fechaAplicacion'])[0] : null,
+                    'observations' => (string) ($st['comentario'] ?? ''),
+                    'products' => $mappedProds,
+                ];
+            }
+        }
+
+        $this->currentStep = 3;
     }
 
     public function updatedZone(string $value, CatalogsRepositoryInterface $catalogs): void
@@ -510,6 +650,94 @@ final class PlanWizard extends Component
         }
 
         try {
+            if ($this->isVersioning && ! empty($this->basePlanCode)) {
+                $maestroData = [
+                    'Code' => $this->basePlanCode,
+                    'CardCode' => $this->customerCode,
+                    'Name' => "Plan {$this->parcela} - {$this->customerCode}",
+                    'Parcela' => $this->parcela,
+                    'Superficie' => (float) $this->hectares,
+                    'CodeTipoSuelo' => $this->soilType,
+                    'AnalisisSuelo' => strtoupper((string) $this->analisisSuelo) === 'SI' ? 'SI' : 'NO',
+                    'Coordenadas' => ($this->latitude && $this->longitude) ? "{$this->latitude},{$this->longitude}" : null,
+                    'CodeCultAnterior' => $this->previousCrop,
+                    'RendimientoReal' => $this->previousCropYield ? (float) $this->previousCropYield : null,
+                    'RendimientoMax' => $this->previousCropMaxYield ? (float) $this->previousCropMaxYield : null,
+                    'CodeCultivo' => $this->currentCropCode,
+                    'FechaSiembra' => $this->estimatedSowingDate,
+                    'VariedadSemilla' => $this->seedVariety,
+                    'ObjetivoProd' => ($this->targetYield ?? $this->currentCropTargetYield) ? (float) ($this->targetYield ?? $this->currentCropTargetYield) : null,
+                    'IDAsesorAgr' => $this->advisorId,
+                    'IDAsesorVenta' => $this->advisorId,
+                ];
+
+                $etapasArray = [];
+                foreach ($this->stages as $st) {
+                    $productsToSend = [];
+                    foreach ($st['products'] ?? [] as $p) {
+                        $d = (float) ($p['dosePerHectare'] ?? $p['dosis'] ?? 0);
+                        $iCode = $p['itemCode'] ?? $p['id'] ?? null;
+                        if (! empty($iCode) && $d > 0) {
+                            $productsToSend[] = [
+                                'id' => $iCode,
+                                'dosis' => number_format($d, 4, '.', ''),
+                            ];
+                        }
+                    }
+
+                    $idApp = null;
+                    if (! empty($st['applicationMethod']) && is_numeric($st['applicationMethod'])) {
+                        $idApp = (int) $st['applicationMethod'];
+                    }
+
+                    $etapasArray[] = [
+                        'codeEtapa' => (int) ($st['stageId'] ?? 0),
+                        'nameEtapa' => (string) ($st['stageName'] ?? ''),
+                        'listaProductos' => json_encode($productsToSend),
+                        'fechaAplicacion' => $st['applicationDate'] ?? null,
+                        'idAplicacion' => $idApp,
+                        'comentario' => $st['observations'] ?? '',
+                        'U_Code_PlanFert' => $this->basePlanCode,
+                    ];
+                }
+
+                $versionResult = app(FertilizationPlanRepositoryInterface::class)->versionPlanFull(
+                    $this->basePlanCode,
+                    $maestroData,
+                    $etapasArray
+                );
+
+                if (empty($versionResult['success'])) {
+                    $this->errorMessage = $versionResult['message'] ?? 'Error al versionar plan.';
+                    $this->showErrorModal = true;
+
+                    return;
+                }
+
+                $this->newVersion = (int) ($versionResult['version'] ?? ($this->baseVersion + 1));
+                $this->savedPlanCode = $this->basePlanCode;
+                $this->savedPlanMessage = "Nueva versión V{$this->newVersion} para el plan {$this->basePlanCode}";
+                $this->successMessage = "¡Se ha creado la versión V{$this->newVersion} del plan {$this->basePlanCode} exitosamente!";
+
+                try {
+                    $planData = $this->getPlanDataForPdf();
+                    $planData['version'] = $this->newVersion;
+                    $pdfOutput = app(DomPdfService::class)->generateProposalPdf($planData);
+                    app(FertilizationPlanRepositoryInterface::class)->savePlanPdf(
+                        planCode: (string) $this->basePlanCode,
+                        version: $this->newVersion,
+                        status: 'Activo',
+                        base64File: base64_encode($pdfOutput)
+                    );
+                } catch (\Throwable $pdfError) {
+                    Log::warning('[PlanWizard] Error al guardar PDF de versión', ['error' => $pdfError->getMessage()]);
+                }
+
+                $this->showSuccessModal = true;
+
+                return;
+            }
+
             $targetYieldVal = $this->targetYield ?? $this->currentCropTargetYield;
             $hasSoilAnalysis = strtoupper((string) $this->analisisSuelo) === 'SI';
 
@@ -622,8 +850,8 @@ final class PlanWizard extends Component
             'PlanCode' => (string) ($this->savedPlanCode ?? 'PF-NUEVO'),
             'id' => (string) ($this->savedPlanCode ?? 'PF-NUEVO'),
             'mensaje' => $planMessage,
-            'version' => 1,
-            'Version' => 1,
+            'version' => $this->isVersioning ? $this->newVersion : 1,
+            'Version' => $this->isVersioning ? $this->newVersion : 1,
             'customerName' => $this->customerName,
             'productor' => $this->customerName,
             'CardName' => $this->customerName,
@@ -713,7 +941,8 @@ final class PlanWizard extends Component
         try {
             $planData = $this->getPlanDataForPdf();
             $pdfOutput = $pdfService->generateProposalPdf($planData);
-            $fileName = sprintf('PlanFertilizacion-%s-V1.pdf', $this->savedPlanCode ?? 'PROPUESTA');
+            $versionNum = $this->isVersioning ? $this->newVersion : 1;
+            $fileName = sprintf('PlanFertilizacion-%s-V%s.pdf', $this->savedPlanCode ?? 'PROPUESTA', $versionNum);
 
             return response()->streamDownload(
                 fn () => print ($pdfOutput),

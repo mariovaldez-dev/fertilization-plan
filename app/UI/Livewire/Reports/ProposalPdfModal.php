@@ -33,11 +33,13 @@ final class ProposalPdfModal extends Component
         string $planCode,
         int $version,
         string $customerName,
-        GenerateProposalPdfUseCase $generatePdfUseCase
+        GenerateProposalPdfUseCase $generatePdfUseCase,
+        ?string $phone = null
     ): void {
         $this->planCode = $planCode;
         $this->version = $version;
         $this->customerName = $customerName;
+        $this->recipientPhone = (string) ($phone ?? '');
 
         $report = $generatePdfUseCase->execute($planCode, $version);
         $this->pdfBase64 = $report['pdfBase64'] ?? null;

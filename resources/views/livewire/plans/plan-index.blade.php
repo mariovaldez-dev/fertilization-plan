@@ -11,6 +11,12 @@
         </div>
 
         <div class="flex items-center gap-3">
+            @if($cardCode)
+                <a href="{{ route('seguimiento.index') }}" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-gray-700 dark:text-gray-200 font-bold text-xs transition-colors">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Volver a Clientes</span>
+                </a>
+            @endif
             <a href="{{ route('wizard.index') }}" class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-600 hover:bg-green-500 text-white font-bold text-sm shadow-lg shadow-green-600/20 transition-all duration-200">
                 <i class="fa-solid fa-plus text-xs"></i>
                 <span>Crear Nuevo Plan</span>
@@ -300,6 +306,10 @@
 
                             <!-- Capture Results Modal Button -->
                             @if(!$isReadOnly)
+                                <a href="{{ route('plan.version', $p->planCode) }}" class="p-2.5 rounded-xl text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors" title="Versionar Plan (Crear V{{ $p->version + 1 }})">
+                                    <i class="fa-solid fa-code-branch text-sm"></i>
+                                </a>
+
                                 <button wire:click="$dispatch('open-capture-results', { planCode: '{{ $p->planCode }}' })" class="p-2.5 rounded-xl text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors" title="Capturar Resultados Finales">
                                     <i class="fa-solid fa-clipboard-check text-sm"></i>
                                 </button>
