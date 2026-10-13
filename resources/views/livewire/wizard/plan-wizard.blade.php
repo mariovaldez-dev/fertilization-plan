@@ -83,120 +83,90 @@
             class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
         >
             <!-- Backdrop con Blur -->
-            <div class="fixed inset-0 bg-gray-900/60 dark:bg-black/75"></div>
+            <div class="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
 
-            <!-- Panel del Modal Bento Style -->
-            <div class="relative w-full max-w-lg bg-white dark:bg-[#131b20] rounded-3xl p-6 sm:p-8 shadow-2xl border border-gray-100 dark:border-white/10 text-center space-y-6">
-                <!-- Icono Animado con Anillo de Pulso Verde -->
-                <div class="relative mx-auto w-20 h-20 flex items-center justify-center">
-                    <div class="absolute inset-0 rounded-full bg-green-500/20 animate-ping"></div>
-                    <div class="relative w-20 h-20 rounded-full bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400 flex items-center justify-center border-2 border-green-500/30 shadow-inner">
-                        <i class="fa-solid fa-check text-3xl"></i>
-                    </div>
+            <!-- Panel del Modal Bento Style (Compacto max-w-sm como en React) -->
+            <div class="relative w-full max-w-sm bg-white dark:bg-[#131b20] rounded-3xl p-6 sm:p-8 shadow-2xl border border-gray-100 dark:border-white/10 text-center space-y-4">
+                
+                <!-- Botón Cerrar (X) arriba a la derecha que redirige al Dashboard como en React -->
+                <button 
+                    type="button"
+                    wire:click="closeSuccessModal" 
+                    class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors p-1 cursor-pointer"
+                    title="Cerrar y volver al Dashboard"
+                >
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+
+                <!-- Icono Check Verde -->
+                <div class="mx-auto bg-green-100 dark:bg-green-500/20 rounded-full h-16 w-16 flex items-center justify-center border border-green-500/30">
+                    <i class="fa-solid fa-check text-green-600 dark:text-green-400 text-2xl"></i>
                 </div>
 
-                <div class="space-y-2">
-                    <h3 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                        ¡Plan Registrado con Éxito!
-                    </h3>
-                    <p class="text-sm font-medium text-gray-600 dark:text-gray-300 leading-relaxed">
-                        {{ $successMessage }}
-                    </p>
+                <div class="space-y-1">
+                    <h2 class="text-xl font-bold text-gray-800 dark:text-white">
+                        El plan ha sido guardado exitosamente
+                    </h2>
                 </div>
 
                 @if($savedPlanCode)
-                    <div class="p-3.5 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 rounded-2xl flex items-center justify-center gap-2">
+                    <div class="p-2.5 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 rounded-xl flex items-center justify-center gap-2">
                         <span class="text-xs font-bold uppercase tracking-wider text-green-700 dark:text-green-400">Folio del Plan:</span>
                         <span class="text-sm font-black text-green-800 dark:text-green-300 font-mono">{{ $savedPlanCode }}</span>
                     </div>
                 @endif
 
-                <!-- Campo de Envío por WhatsApp -->
-                <div class="p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 text-left space-y-1.5">
-                    <label class="block text-xs font-bold text-gray-600 dark:text-gray-400">
-                        Número de WhatsApp (opcional):
-                    </label>
-                    <div class="flex items-center gap-2">
-                        <span class="text-emerald-500 text-sm shrink-0"><i class="fa-brands fa-whatsapp"></i></span>
-                        <input 
-                            type="text" 
-                            wire:model="advisorPhone" 
-                            placeholder="Celular para WhatsApp (10 dígitos)" 
-                            class="w-full px-3 py-2 text-xs bg-white dark:bg-[#1A2227] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
-                        />
-                    </div>
-                </div>
-
                 <!-- Notificaciones de WhatsApp -->
                 @if($whatsAppSuccess)
-                    <div class="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-2xl text-xs font-bold flex items-center gap-2 text-left">
+                    <div class="p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 rounded-xl text-xs font-bold flex items-center gap-2 text-left">
                         <i class="fa-solid fa-circle-check text-base shrink-0"></i>
                         <span>{{ $whatsAppSuccess }}</span>
                     </div>
                 @endif
 
                 @if($whatsAppError)
-                    <div class="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-2xl text-xs font-bold flex items-center gap-2 text-left">
+                    <div class="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl text-xs font-bold flex items-center gap-2 text-left">
                         <i class="fa-solid fa-triangle-exclamation text-base shrink-0"></i>
                         <span>{{ $whatsAppError }}</span>
                     </div>
                 @endif
 
-                <!-- Acciones Principales: Descargar PDF y WhatsApp -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <!-- Dos Botones Horizontales: Compartir y Descargar -->
+                <div class="flex justify-center gap-3 pt-2">
+                    <!-- Botón Compartir (WhatsApp del Asesor) -->
+                    <button
+                        type="button"
+                        wire:click="shareViaWhatsApp"
+                        wire:loading.attr="disabled"
+                        wire:target="shareViaWhatsApp"
+                        class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-green-600/30 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50 text-sm"
+                    >
+                        <span wire:loading.remove wire:target="shareViaWhatsApp" class="flex items-center gap-2">
+                            <i class="fa-brands fa-whatsapp text-lg"></i>
+                            <span>Compartir</span>
+                        </span>
+                        <span wire:loading wire:target="shareViaWhatsApp" class="flex items-center gap-2">
+                            <i class="fa-solid fa-spinner fa-spin text-base"></i>
+                            <span>Enviando...</span>
+                        </span>
+                    </button>
+
                     <!-- Botón Descargar PDF -->
                     <button
                         type="button"
                         wire:click="downloadProposalPdf"
                         wire:loading.attr="disabled"
                         wire:target="downloadProposalPdf"
-                        class="w-full px-4 py-3 bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-2xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
+                        class="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-white/10 dark:hover:bg-white/20 text-gray-800 dark:text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50 text-sm"
                     >
                         <span wire:loading.remove wire:target="downloadProposalPdf" class="flex items-center gap-2">
-                            <i class="fa-solid fa-file-pdf text-red-500 text-base"></i>
-                            <span>Descargar PDF</span>
+                            <i class="fa-solid fa-download text-base"></i>
+                            <span>Descargar</span>
                         </span>
                         <span wire:loading wire:target="downloadProposalPdf" class="flex items-center gap-2">
-                            <i class="fa-solid fa-spinner fa-spin"></i>
+                            <i class="fa-solid fa-spinner fa-spin text-base"></i>
                             <span>Generando...</span>
                         </span>
-                    </button>
-
-                    <!-- Botón Enviar WhatsApp -->
-                    <button
-                        type="button"
-                        wire:click="shareViaWhatsApp"
-                        wire:loading.attr="disabled"
-                        wire:target="shareViaWhatsApp"
-                        class="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition-all duration-200 shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
-                    >
-                        <span wire:loading.remove wire:target="shareViaWhatsApp" class="flex items-center gap-2">
-                            <i class="fa-brands fa-whatsapp text-lg"></i>
-                            <span>Enviar WhatsApp</span>
-                        </span>
-                        <span wire:loading wire:target="shareViaWhatsApp" class="flex items-center gap-2">
-                            <i class="fa-solid fa-spinner fa-spin"></i>
-                            <span>Enviando...</span>
-                        </span>
-                    </button>
-                </div>
-
-                <!-- Acciones de Navegación -->
-                <div class="pt-2 flex flex-col sm:flex-row gap-3 justify-center border-t border-gray-100 dark:border-white/5">
-                    <a
-                        href="{{ route('dashboard') }}"
-                        class="w-full sm:w-1/2 px-5 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-gray-700 dark:text-gray-200 rounded-2xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 text-center"
-                    >
-                        <i class="fa-solid fa-house text-xs"></i>
-                        <span>Ir al Dashboard</span>
-                    </a>
-                    <button
-                        type="button"
-                        wire:click="closeSuccessModal"
-                        class="w-full sm:w-1/2 px-5 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-white/20 dark:hover:bg-white/25 text-gray-800 dark:text-white rounded-2xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
-                    >
-                        <span>Ver Planes del Cliente</span>
-                        <i class="fa-solid fa-arrow-right text-xs"></i>
                     </button>
                 </div>
             </div>

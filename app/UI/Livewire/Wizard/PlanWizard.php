@@ -736,7 +736,7 @@ final class PlanWizard extends Component
     ): void {
         $phone = preg_replace('/[^0-9]/', '', (string) $this->advisorPhone);
         if (strlen($phone) < 10) {
-            $this->whatsAppError = 'Ingresa un número telefónico válido (mínimo 10 dígitos) para enviar por WhatsApp.';
+            $this->whatsAppError = 'El asesor técnico seleccionado no tiene un número de teléfono configurado.';
 
             return;
         }
@@ -752,10 +752,9 @@ final class PlanWizard extends Component
 
             $fileName = sprintf('Plan_Fertilizacion_%s.pdf', $this->customerName ?: 'Cliente');
             $customMessage = sprintf(
-                "🌱 *Plan de Fertilización disponible* 🌱\nHola %s 👋\n\nTe compartimos tu Plan de Fertilización (Folio: *%s*) para el predio *%s* con las recomendaciones agronómicas calculadas.\n\n📄 Adjunto encontrarás el documento en formato PDF.\n\n¡Gracias por tu confianza! 🌾",
-                $this->customerName ?: 'Productor',
-                $this->savedPlanCode ?? 'N/A',
-                $this->parcela ?: 'Lote'
+                "🌱 *Plan de Fertilización disponible* 🌱\nHola Asesor 👋\n\nTe compartimos el Plan de Fertilización del cliente *%s* (Folio: *%s*) para tu revisión y validación técnica.\n\n📄 Adjunto encontrarás el documento con las recomendaciones agronómicas. Por favor revísalo y compártenos tus observaciones o confirmación para continuar con el siguiente paso.\n\n¡Gracias por tu apoyo! 🌾",
+                $this->customerName ?: 'Cliente',
+                $this->savedPlanCode ?? 'N/A'
             );
 
             $dto = new WhatsAppMessageDTO(
@@ -769,7 +768,7 @@ final class PlanWizard extends Component
             $result = $whatsAppUseCase->execute($dto);
 
             if (! empty($result['success'])) {
-                $this->whatsAppSuccess = $result['message'] ?? '¡Plan enviado por WhatsApp exitosamente!';
+                $this->whatsAppSuccess = $result['message'] ?? 'Plan enviado al asesor técnico exitosamente.';
 
                 if ($this->savedPlanCode) {
                     $planRepository->savePlanPdf(
@@ -793,11 +792,7 @@ final class PlanWizard extends Component
     public function closeSuccessModal(): void
     {
         $this->showSuccessModal = false;
-        if (! empty($this->customerCode)) {
-            $this->redirect(route('seguimiento.planes', ['cardCode' => $this->customerCode]));
-        } else {
-            $this->redirect(route('seguimiento.index'));
-        }
+        $this->redirect(route('dashboard'));
     }
 
     public function closeErrorModal(): void
