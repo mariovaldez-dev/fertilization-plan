@@ -1,0 +1,759 @@
+{
+	"info": {
+		"_postman_id": "9b1a5e12-c289-4a99-b1d5-f8a7e089d123",
+		"name": "API Plan de Fertilización - Grupo Impulsora",
+		"description": "Colección completa de endpoints para el sistema de Plan de Fertilización (Api-PlanFertilizacion) de Grupo Impulsora. Incluye autenticación, catálogos, combos SAP, gestión de planes, seguimiento por etapas, captura de resultados y generación de datos PDF.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000/api",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "card_code",
+			"value": "C000123",
+			"type": "string"
+		},
+		{
+			"key": "plan_code",
+			"value": "PF-2026-0001",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{auth_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "01. Autenticación",
+			"item": [
+				{
+					"name": "Iniciar Sesión (Login)",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"usuario\": \"asesor@impulsora.com\",\n    \"password\": \"Impulsora2026*\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Autentica a un asesor agrónomo y retorna el token de sesión Bearer."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "02. Catálogos y Búsquedas",
+			"item": [
+				{
+					"name": "Buscar Clientes (SAP)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/clientes/buscar?texto=Agricola&zona=NTE&page=1&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"clientes",
+								"buscar"
+							],
+							"query": [
+								{
+									"key": "texto",
+									"value": "Agricola",
+									"description": "Nombre o código del cliente"
+								},
+								{
+									"key": "zona",
+									"value": "NTE",
+									"description": "Filtro opcional por zona"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Búsqueda paginada de clientes SAP por nombre o CardCode."
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Clientes Rápido (buscar2)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/clientes/buscar2?texto=Valdez",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"clientes",
+								"buscar2"
+							],
+							"query": [
+								{
+									"key": "texto",
+									"value": "Valdez"
+								}
+							]
+						},
+						"description": "Búsqueda autocomplete simplificada de clientes."
+					},
+					"response": []
+				},
+				{
+					"name": "Obtener Cultivos del Cliente",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/clientes/cultivos?cardCode={{card_code}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"clientes",
+								"cultivos"
+							],
+							"query": [
+								{
+									"key": "cardCode",
+									"value": "{{card_code}}",
+									"description": "Código SAP del Cliente (CardCode)"
+								}
+							]
+						},
+						"description": "Obtiene el historial de cultivos y fechas de siembra registradas para el cliente."
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Asesores Técnicos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/asesores/buscar?nombre=Mario",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"asesores",
+								"buscar"
+							],
+							"query": [
+								{
+									"key": "nombre",
+									"value": "Mario",
+									"description": "Nombre o SlpCode del asesor agrónomo"
+								}
+							]
+						},
+						"description": "Búsqueda de asesores técnicos / vendedores de Grupo Impulsora."
+					},
+					"response": []
+				},
+				{
+					"name": "Obtener Zonas",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/zonas",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"zonas"
+							]
+						},
+						"description": "Listado de zonas operativas (Norte, Sur, Centro, Bajío, etc.)."
+					},
+					"response": []
+				},
+				{
+					"name": "Combos - Tipos de Suelo (opcion=1)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/combos/buscar?opcion=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"combos",
+								"buscar"
+							],
+							"query": [
+								{
+									"key": "opcion",
+									"value": "1",
+									"description": "1 = Tipos de Suelo"
+								}
+							]
+						},
+						"description": "Catálogo de texturas de suelo (Arcilloso, Arenoso, Franco, Franco Arcilloso, etc.)."
+					},
+					"response": []
+				},
+				{
+					"name": "Combos - Cultivos y Territorios (opcion=2)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/combos/buscar?opcion=2",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"combos",
+								"buscar"
+							],
+							"query": [
+								{
+									"key": "opcion",
+									"value": "2",
+									"description": "2 = Cultivos y Territorios"
+								}
+							]
+						},
+						"description": "Catálogo general de cultivos agrícolas."
+					},
+					"response": []
+				},
+				{
+					"name": "Combos - Productos y Fertilizantes (opcion=3)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/combos/buscar?opcion=3",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"combos",
+								"buscar"
+							],
+							"query": [
+								{
+									"key": "opcion",
+									"value": "3",
+									"description": "3 = Productos / Nutrición / Fertilizantes"
+								}
+							]
+						},
+						"description": "Catálogo de productos de nutrición vegetal con ingrediente activo."
+					},
+					"response": []
+				},
+				{
+					"name": "Combos - Métodos de Aplicación (opcion=4)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/combos/buscar?opcion=4",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"combos",
+								"buscar"
+							],
+							"query": [
+								{
+									"key": "opcion",
+									"value": "4",
+									"description": "4 = Métodos de Aplicación"
+								}
+							]
+						},
+						"description": "Catálogo de métodos (Fertirriego, Foliar, Al Suelo / Granulado, Drench)."
+					},
+					"response": []
+				},
+				{
+					"name": "Recomendación de Etapas por Cultivo",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/plan-fertilizacion/recomendacion?cultivoId=MAIZ&territorio=CULIACAN",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"plan-fertilizacion",
+								"recomendacion"
+							],
+							"query": [
+								{
+									"key": "cultivoId",
+									"value": "MAIZ",
+									"description": "Código o nombre del cultivo"
+								},
+								{
+									"key": "territorio",
+									"value": "CULIACAN",
+									"description": "Territorio opcional"
+								}
+							]
+						},
+						"description": "Obtiene la plantilla fenológica y recomendaciones base de productos por etapa para el cultivo."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "03. Planes de Fertilización",
+			"item": [
+				{
+					"name": "Listar Planes por Cliente",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/planes-cliente/{{card_code}}?soloCerrados=0&zona=NTE&territorio=CULIACAN&temporada=2025-2026",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"planes-cliente",
+								"{{card_code}}"
+							],
+							"query": [
+								{
+									"key": "soloCerrados",
+									"value": "0",
+									"description": "0 = Todos, 1 = Solo Cerrados"
+								},
+								{
+									"key": "zona",
+									"value": "NTE"
+								},
+								{
+									"key": "territorio",
+									"value": "CULIACAN"
+								},
+								{
+									"key": "temporada",
+									"value": "2025-2026"
+								}
+							]
+						},
+						"description": "Consulta los planes de nutrición creados para un cliente específico."
+					},
+					"response": []
+				},
+				{
+					"name": "Crear / Guardar Plan de Fertilización",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cardCode\": \"{{card_code}}\",\n    \"cardName\": \"Agrícola San José S.P.R. de R.L.\",\n    \"advisorId\": \"105\",\n    \"advisorName\": \"Ing. Juan Pérez\",\n    \"parcela\": \"Lote La Presita #4\",\n    \"hectareas\": 50.0,\n    \"zona\": \"NTE\",\n    \"territorio\": \"CULIACAN\",\n    \"temporada\": \"2025-2026\",\n    \"tipoSuelo\": \"Franco Arcilloso\",\n    \"latitud\": 24.809060,\n    \"longitud\": -107.394020,\n    \"tieneAnalisisSuelo\": true,\n    \"analisisSuelo\": \"SI\",\n    \"archivoSuelo\": \"analisis_suelo_lote4.pdf\",\n    \"archivoSueloBase64\": \"\",\n    \"llevaTestigo\": true,\n    \"cultivoAnterior\": \"Frijol\",\n    \"rendimientoAnterior\": 2.2,\n    \"rendimientoMaxRef\": 3.0,\n    \"cultivoActual\": \"MAIZ\",\n    \"cultivoActualName\": \"Maíz Blanco\",\n    \"seedVariety\": \"DK-4018\",\n    \"fechaSiembra\": \"2026-10-15\",\n    \"metaRendimiento\": 14.5,\n    \"etapas\": [\n        {\n            \"stageId\": 1,\n            \"stageName\": \"Siembra / Fondo\",\n            \"orderIndex\": 1,\n            \"applicationDate\": \"2026-10-15\",\n            \"applicationMethod\": \"Al Suelo / Granulado\",\n            \"observations\": \"Aplicación incorporada en la siembra\",\n            \"products\": [\n                {\n                    \"itemCode\": \"FERT-001\",\n                    \"itemName\": \"Fosfato Monoamónico (MAP)\",\n                    \"dosePerHectare\": 200.0,\n                    \"unitPrice\": 18.50,\n                    \"unitOfMeasure\": \"Kg/Ha\",\n                    \"applicationMethod\": \"Al Suelo / Granulado\"\n                },\n                {\n                    \"itemCode\": \"FERT-002\",\n                    \"itemName\": \"Urea Perlada\",\n                    \"dosePerHectare\": 150.0,\n                    \"unitPrice\": 14.20,\n                    \"unitOfMeasure\": \"Kg/Ha\",\n                    \"applicationMethod\": \"Al Suelo / Granulado\"\n                }\n            ]\n        },\n        {\n            \"stageId\": 2,\n            \"stageName\": \"V4 - Desarrollo Vegetativo\",\n            \"orderIndex\": 2,\n            \"applicationDate\": \"2026-11-10\",\n            \"applicationMethod\": \"Fertirriego\",\n            \"observations\": \"Primer auxilio de riego\",\n            \"products\": [\n                {\n                    \"itemCode\": \"FERT-003\",\n                    \"itemName\": \"Nitrato de Calcio Soluble\",\n                    \"dosePerHectare\": 75.0,\n                    \"unitPrice\": 22.00,\n                    \"unitOfMeasure\": \"Kg/Ha\",\n                    \"applicationMethod\": \"Fertirriego\"\n                }\n            ]\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/plan-fertilizacion/guardar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"plan-fertilizacion",
+								"guardar"
+							]
+						},
+						"description": "Crea un nuevo Plan de Fertilización completo con geolocalización, análisis de suelo, testigo y etapas fenológicas."
+					},
+					"response": []
+				},
+				{
+					"name": "Versionar Plan",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"planCode\": \"{{plan_code}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/plan-fertilizacion/versionar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"plan-fertilizacion",
+								"versionar"
+							]
+						},
+						"description": "Genera una nueva versión inmutable (v2, v3...) del plan de nutrición conservando el historial."
+					},
+					"response": []
+				},
+				{
+					"name": "Cancelar Plan",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"comentario\": \"Cancelado por cambio de cultivo del productor a garbanzo.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/planes-cliente/{{plan_code}}/cancelar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"planes-cliente",
+								"{{plan_code}}",
+								"cancelar"
+							]
+						},
+						"description": "Cancela el plan de fertilización indicando el motivo agronómico."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "04. Seguimiento y Bitácora de Etapas",
+			"item": [
+				{
+					"name": "Guardar Seguimiento de Etapas (Lote Normal / Testigo)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"etapas\": [\n        {\n            \"stageId\": 1,\n            \"nombreEtapa\": \"Siembra / Fondo\",\n            \"fechaAplicacion\": \"2026-10-16\",\n            \"esTestigo\": false,\n            \"comentarios\": \"Aplicado en tiempo y forma sin contratiempos\",\n            \"productos\": [\n                {\n                    \"itemCode\": \"FERT-001\",\n                    \"nombre\": \"Fosfato Monoamónico (MAP)\",\n                    \"dosis\": 200.0,\n                    \"precio\": 18.50,\n                    \"unidad\": \"Kg/Ha\",\n                    \"metodo\": \"Al Suelo / Granulado\"\n                }\n            ]\n        },\n        {\n            \"stageId\": 1,\n            \"nombreEtapa\": \"Siembra / Fondo (Testigo)\",\n            \"fechaAplicacion\": \"2026-10-16\",\n            \"esTestigo\": true,\n            \"comentarios\": \"Manejo tradicional del agricultor\",\n            \"productos\": [\n                {\n                    \"itemCode\": \"FERT-TRAD-01\",\n                    \"nombre\": \"Mezcla Física 18-46-00\",\n                    \"dosis\": 250.0,\n                    \"precio\": 19.80,\n                    \"unidad\": \"Kg/Ha\",\n                    \"metodo\": \"Al Suelo / Granulado\"\n                }\n            ]\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/planes-cliente/{{plan_code}}/seguimiento",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"planes-cliente",
+								"{{plan_code}}",
+								"seguimiento"
+							]
+						},
+						"description": "Guarda la bitácora de seguimiento técnico de las aplicaciones reales tanto para el lote Impulsora como para el lote Testigo."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "05. Cierre y Resultados Agronómicos",
+			"item": [
+				{
+					"name": "Capturar Resultados Finales de Cosecha",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"U_Rendimiento\": 15.2,\n    \"U_FechaCosecha\": \"2026-05-20\",\n    \"U_Comentarios\": \"Se superó la meta agronómica en +0.7 ton/ha respecto a la propuesta y +2.1 ton/ha contra el testigo tradicional. Excelente respuesta al manejo de nitrato de calcio y potasio en fertirriego.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/planes-cliente/{{plan_code}}/guardar-resultados",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"planes-cliente",
+								"{{plan_code}}",
+								"guardar-resultados"
+							]
+						},
+						"description": "Registra los resultados agronómicos finales de cosecha, rendimiento obtenido y conclusiones técnicas."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "06. Reportes PDF y Documentos",
+			"item": [
+				{
+					"name": "Consultar Datos para PDF de Propuesta",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/plan-fertilizacion/datos-pdf?planCode={{plan_code}}&version=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"plan-fertilizacion",
+								"datos-pdf"
+							],
+							"query": [
+								{
+									"key": "planCode",
+									"value": "{{plan_code}}"
+								},
+								{
+									"key": "version",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Obtiene la estructura completa de datos (maestro, etapas, nutrición, dosis) para generar el PDF de Propuesta Técnica."
+					},
+					"response": []
+				},
+				{
+					"name": "Guardar PDF de Propuesta Generado",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"planCode\": \"{{plan_code}}\",\n    \"version\": 1,\n    \"status\": \"Activo\",\n    \"archivoBase64\": \"JVBERi0xLjQKJcTl8uXrp...\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/plan-fertilizacion/guardar-pdf",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"plan-fertilizacion",
+								"guardar-pdf"
+							]
+						},
+						"description": "Almacena en el servidor el archivo PDF generado en base64 para su descarga o envío por WhatsApp."
+					},
+					"response": []
+				},
+				{
+					"name": "Consultar Datos para PDF de Resultados",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/plan-resultados/datos-pdf?planCode={{plan_code}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"plan-resultados",
+								"datos-pdf"
+							],
+							"query": [
+								{
+									"key": "planCode",
+									"value": "{{plan_code}}"
+								}
+							]
+						},
+						"description": "Obtiene el multiset de resultados finales (comparativa Lote Impulsora vs Testigo, costos y rendimientos) para el PDF final."
+					},
+					"response": []
+				},
+				{
+					"name": "Guardar PDF de Resultados Generado",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"planCode\": \"{{plan_code}}\",\n    \"version\": 1,\n    \"status\": \"Cerrado\",\n    \"archivoBase64\": \"JVBERi0xLjQKJcTl8uXrp...\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/plan-resultados/guardar-pdf",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"plan-resultados",
+								"guardar-pdf"
+							]
+						},
+						"description": "Almacena el PDF comparativo de resultados finales en base64."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
