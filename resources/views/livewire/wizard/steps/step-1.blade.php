@@ -92,14 +92,11 @@
                         >
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="font-medium text-sm">{{ $a['AdvisorName'] ?? $a['SlpName'] ?? $a['Name'] ?? '' }}</p>
+                                    <p class="font-medium text-sm">{{ mb_strtoupper($a['AdvisorName'] ?? $a['SlpName'] ?? $a['Name'] ?? '', 'UTF-8') }}</p>
                                     @if(!empty($a['Email'] ?? ''))
-                                        <p class="text-xs text-gray-400 font-normal">{{ $a['Email'] }}</p>
+                                        <p class="text-xs text-gray-400 dark:text-gray-400 font-normal">{{ $a['Email'] }}</p>
                                     @endif
                                 </div>
-                                @if(!empty($a['Phone'] ?? ''))
-                                    <span class="text-xs text-gray-400 font-mono"><i class="fa-solid fa-phone text-[10px] text-green-500 mr-1"></i>{{ $a['Phone'] }}</span>
-                                @endif
                             </div>
                         </li>
                     @endforeach

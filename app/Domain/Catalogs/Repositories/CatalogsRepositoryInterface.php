@@ -7,9 +7,14 @@ namespace App\Domain\Catalogs\Repositories;
 interface CatalogsRepositoryInterface
 {
     /**
-     * @return array<int, array{CardCode: string, CardName: string, Zone: ?string}>
+     * @return array<int, array{CardCode: string, CardName: string, Zone: ?string, Cellular: string}>
      */
     public function searchCustomers(string $query, ?string $zone = null, int $page = 1, int $limit = 10): array;
+
+    /**
+     * @return array{items: array<int, array{CardCode: string, CardName: string, Zone: ?string, Cellular: string}>, total: int, totalPages: int, page: int, limit: int}
+     */
+    public function searchCustomersPaginated(string $query, ?string $zone = null, int $page = 1, int $limit = 10): array;
 
     /**
      * @return array<int, array{AdvisorId: string, AdvisorName: string}>

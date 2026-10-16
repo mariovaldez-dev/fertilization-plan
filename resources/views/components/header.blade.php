@@ -42,8 +42,17 @@
         </button>
 
         <!-- User Info -->
+        @php
+            $userDisplayName = Auth::user()->name ?? session('user.name') ?? 'Usuario';
+            if (str_contains($userDisplayName, '@')) {
+                $cleanPrefix = explode('@', $userDisplayName)[0];
+                $words = preg_split('/[._-]/', $cleanPrefix);
+                $userDisplayName = ucwords(implode(' ', array_filter($words ?: [$cleanPrefix])));
+            }
+            $userDisplayName = mb_strtoupper($userDisplayName, 'UTF-8');
+        @endphp
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-200 hidden sm:inline-block">
-            {{ Auth::user()->name ?? session('user.name') ?? 'Usuario' }}
+            {{ $userDisplayName }}
         </span>
         
         <!-- User Avatar & Dropdown -->
@@ -71,7 +80,7 @@
                 <div class="px-4 py-2 border-b border-gray-100 dark:border-white/5 sm:hidden">
                     <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">Conectado como</p>
                     <p class="text-sm font-bold text-gray-800 dark:text-white truncate">
-                        {{ Auth::user()->name ?? session('user.name') ?? 'Usuario' }}
+                        {{ $userDisplayName }}
                     </p>
                 </div>
 

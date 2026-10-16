@@ -51,13 +51,20 @@ final class DomPdfService
     public function generateResultsPdf(array $resultsData): string
     {
         $planCode = (string) ($resultsData['planInfo']['PlanCode'] ?? 'PF-DEMO');
-        $parcela = (string) ($resultsData['planInfo']['Parcela'] ?? 'General');
+        $parcela = (string) ($resultsData['planInfo']['Parcela'] ?? $resultsData['planInfo']['U_Parcela'] ?? 'General');
         $cardCode = (string) ($resultsData['planInfo']['CardCode'] ?? '');
         $qrContent = "{$planCode} - Plan {$parcela}".($cardCode !== '' ? " - {$cardCode}" : '');
 
+        $coords = $resultsData['planInfo']['U_Coordenadas'] ?? $resultsData['planInfo']['Coordenadas'] ?? null;
+        $mapBase64 = $this->generateMapBase64($coords);
+        $logoBase64 = $this->getLogoBase64();
+        $qrBase64 = $this->generateQrBase64($qrContent);
+
         $pdf = Pdf::loadView('pdf.results-report', [
             'data' => $resultsData,
-            'qrCode' => $this->generateQrBase64($qrContent),
+            'qrCode' => $qrBase64,
+            'mapBase64' => $mapBase64,
+            'logoBase64' => $logoBase64,
         ]);
 
         $pdf->setPaper('letter', 'portrait');
@@ -71,74 +78,90 @@ final class DomPdfService
             return null;
         }
 
+        $parts = array_map('trim', explode(',', $coordinates));
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        $lat = (float) $parts[0];
+        $lon = (float) $parts[1];
+
+        if ($lat === 0.0 || $lon === 0.0) {
+            return null;
+        }
+
+        // 1. Obtener imagen satelital/híbrida con marcador de Yandex (estándar institucional de la versión React)
         try {
-            $parts = array_map('trim', explode(',', $coordinates));
-            if (count($parts) < 2) {
-                return null;
-            }
-
-            $lat = (float) $parts[0];
-            $lon = (float) $parts[1];
-
-            if ($lat === 0.0 || $lon === 0.0) {
-                return null;
-            }
-
-            $zoom = 14;
-            $n = pow(2, $zoom);
-            $xExact = ($lon + 180) / 360 * $n;
-            $yExact = (1 - log(tan(deg2rad($lat)) + 1 / cos(deg2rad($lat))) / M_PI) / 2 * $n;
-
-            $x0 = (int) floor($xExact);
-            $y0 = (int) floor($yExact);
+            $zoomLevel = 13;
+            $mapType = 'map,skl'; // Híbrido con satélite y vialidades
+            $marker = "pt={$lon},{$lat},pm2rdm"; // Marcador rojo en la coordenada
+            $yandexUrl = "https://static-maps.yandex.ru/1.x/?lang=es_ES&ll={$lon},{$lat}&z={$zoomLevel}&l={$mapType}&size=450,260&{$marker}";
 
             $ctx = stream_context_create([
                 'http' => [
-                    'timeout' => 3,
+                    'timeout' => 3.5,
                     'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                ],
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
                 ],
             ]);
 
+            $imageBytes = @file_get_contents($yandexUrl, false, $ctx);
+            if ($imageBytes !== false && strlen($imageBytes) > 500) {
+                return 'data:image/png;base64,'.base64_encode($imageBytes);
+            }
+        } catch (Throwable) {
+            // Continúa al canvas de contingencia
+        }
+
+        // 2. Canvas local de contingencia en caso de no tener salida a internet
+        try {
+            if (! extension_loaded('gd')) {
+                return null;
+            }
+
             $out = imagecreatetruecolor(450, 260);
 
-            for ($dx = -1; $dx <= 1; $dx++) {
-                for ($dy = -1; $dy <= 1; $dy++) {
-                    $tx = $x0 + $dx;
-                    $ty = $y0 + $dy;
-                    $tileUrl = "https://a.tile.opentopomap.org/{$zoom}/{$tx}/{$ty}.png";
-                    $tileContent = @file_get_contents($tileUrl, false, $ctx);
-                    if ($tileContent) {
-                        $tileImg = @imagecreatefromstring($tileContent);
-                        if ($tileImg) {
-                            $px = 225 + ($tx - $xExact) * 256;
-                            $py = 130 + ($ty - $yExact) * 256;
-                            imagecopy($out, $tileImg, (int) $px, (int) $py, 0, 0, 256, 256);
-                            imagedestroy($tileImg);
-                        }
-                    }
-                }
+            // Fondo de terreno institucional suave
+            $bg = imagecolorallocate($out, 240, 245, 238);
+            imagefill($out, 0, 0, $bg);
+
+            // Cuadrícula sutil de parcela / topográfica
+            $gridColor = imagecolorallocatealpha($out, 180, 200, 175, 70);
+            for ($x = 0; $x < 450; $x += 30) {
+                imageline($out, $x, 0, $x, 260, $gridColor);
+            }
+            for ($y = 0; $y < 260; $y += 30) {
+                imageline($out, 0, $y, 450, $y, $gridColor);
             }
 
             // Marcador institucional centrado en la parcela
             $white = imagecolorallocate($out, 255, 255, 255);
             $green = imagecolorallocate($out, 22, 163, 74);
-            $shadow = imagecolorallocatealpha($out, 0, 0, 0, 60);
+            $shadow = imagecolorallocatealpha($out, 0, 0, 0, 75);
 
-            imagefilledellipse($out, 225, 132, 18, 18, $shadow);
-            imagefilledellipse($out, 225, 130, 16, 16, $white);
-            imagefilledellipse($out, 225, 130, 12, 12, $green);
+            imagefilledellipse($out, 225, 122, 22, 22, $shadow);
+            imagefilledellipse($out, 225, 120, 18, 18, $white);
+            imagefilledellipse($out, 225, 120, 14, 14, $green);
+
+            // Banner inferior con coordenadas GPS
+            $bannerBg = imagecolorallocatealpha($out, 255, 255, 255, 20);
+            imagefilledrectangle($out, 0, 225, 450, 260, $bannerBg);
+            $textColor = imagecolorallocate($out, 60, 80, 60);
+            $coordText = "GPS: {$lat}, {$lon}";
+            imagestring($out, 3, 20, 235, $coordText, $textColor);
 
             ob_start();
-            imagejpeg($out, null, 85);
+            imagejpeg($out, null, 90);
             $finalJpeg = (string) ob_get_clean();
             imagedestroy($out);
 
             return 'data:image/jpeg;base64,'.base64_encode($finalJpeg);
         } catch (Throwable) {
-            // Silently fall back to null
+            return null;
         }
-
-        return null;
     }
 
     private function generateQrBase64(string $code): string

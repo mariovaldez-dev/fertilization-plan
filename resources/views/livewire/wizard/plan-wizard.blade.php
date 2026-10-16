@@ -21,30 +21,148 @@
         <div class="max-w-5xl mx-auto bg-white dark:bg-[#131b20] p-6 sm:p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-white/5 space-y-8">
             
             <!-- Encabezado Principal -->
-            <div class="flex items-center">
-                <div class="w-12 h-12 rounded-2xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center mr-4 border border-green-100 dark:border-green-500/20 shrink-0">
-                    <i class="fa-solid fa-flask-vial text-green-600 dark:text-green-400 text-2xl"></i>
-                </div>
-                <div>
-                    <h1 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-100 dark:border-white/5">
+                <div class="flex items-center gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
                         @if($isVersioning)
-                            Versionar Plan (Base: V{{ $baseVersion }})
+                            <i class="fa-solid fa-code-branch text-xl"></i>
                         @else
-                            Generar Plan de Fertilización
+                            <i class="fa-solid fa-flask-vial text-xl"></i>
                         @endif
-                    </h1>
-                    <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        @if($isVersioning)
-                            Ajuste de propuesta nutricional para generar la versión V{{ $newVersion }} del plan #{{ $basePlanCode }}
-                        @else
-                            Configuración agronómica por etapas fenológicas y georreferenciación
-                        @endif
-                    </p>
+                    </div>
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h1 class="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                                @if($isVersioning)
+                                    Versionar Plan (Base: V{{ $baseVersion }})
+                                @else
+                                    Generar Plan de Fertilización
+                                @endif
+                            </h1>
+                            @if($isVersioning)
+                                <span class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                                    Nueva Versión: V{{ $newVersion }} • Plan #{{ $basePlanCode }}
+                                </span>
+                            @endif
+                        </div>
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5">
+                            @if($isVersioning)
+                                Ajusta los productos, dosis y aplicaciones por etapa fenológica para esta versión.
+                            @else
+                                Configuración agronómica por etapas fenológicas y georreferenciación
+                            @endif
+                        </p>
+                    </div>
                 </div>
+                @if($isVersioning)
+                    <div class="self-start sm:self-center">
+                        <span class="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-white/5 border border-gray-200/80 dark:border-white/10 px-3 py-1 rounded-full">
+                            <i class="fa-solid fa-lock text-[10px] text-gray-400"></i>
+                            <span>Datos del lote inmutables</span>
+                        </span>
+                    </div>
+                @endif
             </div>
 
-            <!-- Stepper UI -->
-            @include('livewire.wizard.steps.stepper')
+            @if($isVersioning)
+                @if(!$isLoaded)
+                    <!-- Skeleton del Resumen del Lote mientras carga la información -->
+                    <div class="bg-gray-50/70 dark:bg-white/[0.02] border border-gray-200/70 dark:border-white/5 rounded-2xl p-4 sm:p-5 animate-pulse">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+                            @for($i = 0; $i < 4; $i++)
+                                <div class="space-y-2">
+                                    <div class="h-2.5 bg-gray-200 dark:bg-white/10 rounded w-16"></div>
+                                    <div class="h-4 bg-gray-200 dark:bg-white/10 rounded w-28"></div>
+                                    <div class="h-3 bg-gray-100 dark:bg-white/5 rounded w-20"></div>
+                                </div>
+                            @endfor
+                        </div>
+                    </div>
+                @else
+                    <!-- Resumen Compacto y Limpio del Lote (Inmutable) -->
+                    <div class="bg-gray-50/70 dark:bg-white/[0.02] border border-gray-200/70 dark:border-white/5 rounded-2xl p-4 sm:p-5">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+                            
+                            <!-- Col 1: Productor -->
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">
+                                    Productor
+                                </span>
+                                <div class="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate" title="{{ $customerName }}">
+                                    {{ $customerName ?: 'Cliente no especificado' }}
+                                </div>
+                                <span class="text-xs font-mono text-gray-400 dark:text-gray-500 block">
+                                    {{ $customerCode ?: 'S/C' }}
+                                </span>
+                            </div>
+
+                            <!-- Col 2: Lote & Superficie -->
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">
+                                    Lote / Parcela
+                                </span>
+                                <div class="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate" title="{{ $parcela }}">
+                                    {{ $parcela ?: 'Parcela 1' }}
+                                </div>
+                                <div class="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <span>{{ $hectares }} Ha</span>
+                                </div>
+                            </div>
+
+                            <!-- Col 3: Cultivo & Suelo -->
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">
+                                    Cultivo & Suelo
+                                </span>
+                                <div class="text-sm font-bold text-gray-900 dark:text-white leading-tight flex items-center gap-2">
+                                <span class="truncate">{{ $currentCropName ?: 'Cultivo' }}</span>
+                                    @if(strtoupper((string)$analisisSuelo) === 'SI')
+                                        <span class="inline-flex items-center text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20" title="Cuenta con análisis de suelo">
+                                            Análisis ✓
+                                        </span>
+                                    @endif
+                                </div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                    <span>{{ $this->soilTypeName }}</span>
+                                    @if(!empty($seedVariety) && !in_array(strtolower($seedVariety), ['sin variedad', 'n/d']))
+                                        <span>• {{ $seedVariety }}</span>
+                                    @endif
+                                    @if(!empty($targetYield))
+                                        <span>• {{ $targetYield }} Ton/Ha</span>
+                                    @endif
+                                </div>
+                            </div>
+
+                            <!-- Col 4: Asesor Técnico -->
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">
+                                    Asesor Técnico
+                                </span>
+                                <div class="text-xs font-bold text-gray-900 dark:text-white leading-tight truncate" title="{{ $advisorName }}">
+                                    {{ $advisorName ?: 'Asesor Comercial' }}
+                                </div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                    @if(!empty($advisorPhone))
+                                        <a class="inline-flex items-center gap-1">
+                                            <i class="fa-solid fa-phone text-[9px] text-green-600"></i>{{ $advisorPhone }}
+                                        </a>
+                                    @elseif(!empty($zone) && $zone !== 'N/D')
+                                        <span>Zona {{ $zone }}</span>
+                                    @elseif(!empty($territory) && $territory !== 'N/D')
+                                        <span>{{ $territory }}</span>
+                                    @else
+                                        <span>Grupo Impulsora</span>
+                                    @endif
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                @endif
+            @else
+                <!-- Stepper UI -->
+                @include('livewire.wizard.steps.stepper')
+            @endif
 
             <!-- ========================================== -->
             <!-- CONTENIDO MODULAR POR PASOS CON SKELETONS  -->
@@ -52,18 +170,28 @@
             <div class="relative min-h-[360px]">
                 @if(!$isLoaded)
                     <!-- Skeleton de Carga Inicial Asíncrona (UI First) -->
-                    @include('livewire.wizard.skeletons.step-1-skeleton')
+                    @if($isVersioning)
+                        @include('livewire.wizard.skeletons.step-3-skeleton')
+                    @else
+                        @include('livewire.wizard.skeletons.step-1-skeleton')
+                    @endif
                 @else
                     <div class="space-y-6">
-                        <div x-show="$wire.currentStep === 1" class="step-transition">
-                            @include('livewire.wizard.steps.step-1')
-                        </div>
-                        <div x-show="$wire.currentStep === 2" x-cloak class="step-transition" style="display: none;">
-                            @include('livewire.wizard.steps.step-2')
-                        </div>
-                        <div x-show="$wire.currentStep === 3" x-cloak class="step-transition" style="display: none;">
-                            @include('livewire.wizard.steps.step-3')
-                        </div>
+                        @if($isVersioning)
+                            <div class="step-transition">
+                                @include('livewire.wizard.steps.step-3')
+                            </div>
+                        @else
+                            <div x-show="$wire.currentStep === 1" class="step-transition">
+                                @include('livewire.wizard.steps.step-1')
+                            </div>
+                            <div x-show="$wire.currentStep === 2" x-cloak class="step-transition" style="display: none;">
+                                @include('livewire.wizard.steps.step-2')
+                            </div>
+                            <div x-show="$wire.currentStep === 3" x-cloak class="step-transition" style="display: none;">
+                                @include('livewire.wizard.steps.step-3')
+                            </div>
+                        @endif
                     </div>
                 @endif
             </div>
@@ -91,17 +219,17 @@
             class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
         >
             <!-- Backdrop con Blur -->
-            <div class="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+            <div class="fixed inset-0 bg-black/60 dark:bg-black/80"></div>
 
             <!-- Panel del Modal Bento Style (Compacto max-w-sm como en React) -->
             <div class="relative w-full max-w-sm bg-white dark:bg-[#131b20] rounded-3xl p-6 sm:p-8 shadow-2xl border border-gray-100 dark:border-white/10 text-center space-y-4">
                 
-                <!-- Botón Cerrar (X) arriba a la derecha que redirige al Dashboard como en React -->
+                <!-- Botón Cerrar (X) arriba a la derecha que redirige al Dashboard/Seguimiento como en React -->
                 <button 
                     type="button"
                     wire:click="closeSuccessModal" 
                     class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors p-1 cursor-pointer"
-                    title="Cerrar y volver al Dashboard"
+                    title="{{ $isVersioning ? 'Cerrar y volver al Seguimiento' : 'Cerrar y volver al Dashboard' }}"
                 >
                     <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
@@ -113,14 +241,23 @@
 
                 <div class="space-y-1">
                     <h2 class="text-xl font-bold text-gray-800 dark:text-white">
-                        El plan ha sido guardado exitosamente
+                        @if($isVersioning)
+                            ¡Versión V{{ $newVersion }} creada exitosamente!
+                        @else
+                            El plan ha sido guardado exitosamente
+                        @endif
                     </h2>
                 </div>
 
                 @if($savedPlanCode)
                     <div class="p-2.5 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 rounded-xl flex items-center justify-center gap-2">
-                        <span class="text-xs font-bold uppercase tracking-wider text-green-700 dark:text-green-400">Folio del Plan:</span>
+                        <span class="text-xs font-bold uppercase tracking-wider text-green-700 dark:text-green-400">
+                            {{ $isVersioning ? 'Plan Versionado:' : 'Folio del Plan:' }}
+                        </span>
                         <span class="text-sm font-black text-green-800 dark:text-green-300 font-mono">{{ $savedPlanCode }}</span>
+                        @if($isVersioning)
+                            <span class="ml-1 px-2 py-0.5 bg-green-600 text-white text-xs font-bold rounded-md">V{{ $newVersion }}</span>
+                        @endif
                     </div>
                 @endif
 
@@ -139,15 +276,27 @@
                     </div>
                 @endif
 
+                <!-- Banner Advertencia Falta Celular Registrado -->
+                @if($this->isCustomerPhoneMissing)
+                    <div class="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs rounded-xl flex items-center gap-2.5 text-left border border-amber-200 dark:border-amber-800/40 shadow-xs">
+                        <i class="fa-solid fa-triangle-exclamation flex-shrink-0 text-base text-amber-600 dark:text-amber-400"></i>
+                        <div class="leading-snug">
+                            <span class="font-bold block">Cliente sin celular registrado</span>
+                            <span class="text-[11px] opacity-90">El cliente no cuenta con número celular en SAP. No es posible compartir por WhatsApp.</span>
+                        </div>
+                    </div>
+                @endif
+
                 <!-- Dos Botones Horizontales: Compartir y Descargar -->
                 <div class="flex justify-center gap-3 pt-2">
-                    <!-- Botón Compartir (WhatsApp del Asesor) -->
+                    <!-- Botón Compartir (WhatsApp al Cliente) -->
                     <button
                         type="button"
                         wire:click="shareViaWhatsApp"
                         wire:loading.attr="disabled"
                         wire:target="shareViaWhatsApp"
-                        class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-green-600/30 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50 text-sm"
+                        @if($this->isCustomerPhoneMissing) disabled title="El cliente no cuenta con celular registrado en SAP" @endif
+                        class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-green-600/30 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:bg-gray-400 disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none text-sm"
                     >
                         <span wire:loading.remove wire:target="shareViaWhatsApp" class="flex items-center gap-2">
                             <i class="fa-brands fa-whatsapp text-lg"></i>

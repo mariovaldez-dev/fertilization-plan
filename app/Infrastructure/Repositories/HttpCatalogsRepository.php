@@ -33,32 +33,88 @@ final class HttpCatalogsRepository implements CatalogsRepositoryInterface
 
     public function searchCustomers(string $query, ?string $zone = null, int $page = 1, int $limit = 10): array
     {
-        try {
-            $trimmed = trim($query);
-            if (empty($trimmed)) {
-                return [];
-            }
+        return $this->searchCustomersPaginated($query, $zone, $page, $limit)['items'];
+    }
 
-            if (empty($zone)) {
+    private function cleanCustomerName(string $name, string $code): string
+    {
+        $name = trim($name);
+        $code = trim($code);
+        if (! empty($code)) {
+            $name = (string) preg_replace('/^\s*'.preg_quote($code, '/').'\s*[-–—:]\s*/i', '', $name);
+        }
+
+        return trim($name);
+    }
+
+    public function searchCustomersPaginated(string $query, ?string $zone = null, int $page = 1, int $limit = 10): array
+    {
+        $startTime = microtime(true);
+        $trimmed = trim($query);
+
+        Log::info('[HttpCatalogsRepository] Customer paginated search initiated', [
+            'query' => $trimmed,
+            'zone' => $zone,
+            'page' => $page,
+            'limit' => $limit,
+        ]);
+
+        try {
+            // Si hay texto de búsqueda y no hay zona seleccionada, usar /clientes/buscar2 (rápido con SP)
+            if (! empty($trimmed) && empty($zone)) {
                 $resp2 = $this->client()->get('/clientes/buscar2', ['texto' => $trimmed]);
                 if ($resp2->successful()) {
                     $data = $resp2->json();
                     $items = $data['data'] ?? $data['clientes'] ?? (is_array($data) ? $data : []);
-                    if (is_array($items) && ! empty($items)) {
-                        return array_map(function ($item) {
+                    if (is_array($items)) {
+                        $mapped = array_map(function ($item) {
+                            $code = (string) ($item['CardCode'] ?? $item['codigo'] ?? $item['id'] ?? $item['code'] ?? '');
+                            $rawName = (string) ($item['CardName'] ?? $item['nombre'] ?? $item['name'] ?? '');
+
                             return [
-                                'CardCode' => (string) ($item['CardCode'] ?? $item['codigo'] ?? $item['id'] ?? $item['code'] ?? ''),
-                                'CardName' => (string) ($item['CardName'] ?? $item['nombre'] ?? $item['name'] ?? ''),
+                                'CardCode' => $code,
+                                'CardName' => $this->cleanCustomerName($rawName, $code),
                                 'Zone' => isset($item['Zone']) ? (string) $item['Zone'] : ($item['zona'] ?? $item['U_Territorio'] ?? null),
+                                'Cellular' => (string) ($item['Cellular'] ?? $item['cellular'] ?? $item['U_Telefono'] ?? $item['telefono'] ?? $item['Phone'] ?? ''),
                             ];
                         }, $items);
+
+                        $total = count($mapped);
+                        $totalPages = max(1, (int) ceil($total / $limit));
+                        $pagedItems = array_slice($mapped, ($page - 1) * $limit, $limit);
+
+                        Log::info('[HttpCatalogsRepository] Customer search via /clientes/buscar2 completed', [
+                            'query' => $trimmed,
+                            'total' => $total,
+                            'items_page_count' => count($pagedItems),
+                            'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                        ]);
+
+                        return [
+                            'items' => $pagedItems,
+                            'total' => $total,
+                            'totalPages' => $totalPages,
+                            'page' => $page,
+                            'limit' => $limit,
+                        ];
                     }
                 }
             }
 
+            // Si no hay texto ni zona, retornar vacío de inmediato para no saturar
+            if (empty($trimmed) && empty($zone)) {
+                return [
+                    'items' => [],
+                    'total' => 0,
+                    'totalPages' => 1,
+                    'page' => $page,
+                    'limit' => $limit,
+                ];
+            }
+
             $response = $this->client()->get('/clientes/buscar', [
                 'texto' => $trimmed,
-                'zona' => $zone,
+                'zona' => $zone ?: null,
                 'page' => $page,
                 'limit' => $limit,
             ]);
@@ -66,21 +122,65 @@ final class HttpCatalogsRepository implements CatalogsRepositoryInterface
             if ($response->successful()) {
                 $data = $response->json();
                 $items = $data['data'] ?? $data['clientes'] ?? (is_array($data) ? $data : []);
+                $pagination = $data['pagination'] ?? [];
 
-                return array_map(function ($item) {
+                $mapped = array_map(function ($item) {
+                    $code = (string) ($item['CardCode'] ?? $item['codigo'] ?? $item['id'] ?? $item['code'] ?? '');
+                    $rawName = (string) ($item['CardName'] ?? $item['nombre'] ?? $item['name'] ?? '');
+
                     return [
-                        'CardCode' => (string) ($item['CardCode'] ?? $item['codigo'] ?? $item['id'] ?? $item['code'] ?? ''),
-                        'CardName' => (string) ($item['CardName'] ?? $item['nombre'] ?? $item['name'] ?? ''),
+                        'CardCode' => $code,
+                        'CardName' => $this->cleanCustomerName($rawName, $code),
                         'Zone' => isset($item['Zone']) ? (string) $item['Zone'] : ($item['zona'] ?? $item['U_Territorio'] ?? null),
+                        'Cellular' => (string) ($item['Cellular'] ?? $item['cellular'] ?? $item['U_Telefono'] ?? $item['telefono'] ?? $item['Phone'] ?? ''),
                     ];
                 }, is_array($items) ? $items : []);
+
+                $total = (int) ($pagination['total'] ?? count($mapped));
+                $totalPages = (int) ($pagination['total_pages'] ?? max(1, (int) ceil($total / $limit)));
+
+                Log::info('[HttpCatalogsRepository] Customer search via /clientes/buscar completed', [
+                    'query' => $trimmed,
+                    'zone' => $zone,
+                    'total' => $total,
+                    'items_page_count' => count($mapped),
+                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                ]);
+
+                return [
+                    'items' => $mapped,
+                    'total' => $total,
+                    'totalPages' => $totalPages,
+                    'page' => $page,
+                    'limit' => $limit,
+                ];
             }
 
-            return [];
-        } catch (\Throwable $e) {
-            Log::error('[HttpCatalogsRepository] searchCustomers error', ['error' => $e->getMessage()]);
+            Log::warning('[HttpCatalogsRepository] /clientes/buscar returned non-successful response', [
+                'status' => $response->status(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
 
-            return [];
+            return [
+                'items' => [],
+                'total' => 0,
+                'totalPages' => 1,
+                'page' => $page,
+                'limit' => $limit,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[HttpCatalogsRepository] searchCustomersPaginated error', [
+                'error' => $e->getMessage(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
+
+            return [
+                'items' => [],
+                'total' => 0,
+                'totalPages' => 1,
+                'page' => $page,
+                'limit' => $limit,
+            ];
         }
     }
 

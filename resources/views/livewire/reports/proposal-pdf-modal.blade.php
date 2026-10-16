@@ -1,66 +1,118 @@
 <div>
     @if($isOpen)
-        <div class="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" x-cloak>
-            <div class="relative w-full max-w-4xl bg-white dark:bg-[#131B20] rounded-3xl border border-gray-100 dark:border-white/10 shadow-2xl p-6 lg:p-8 space-y-6">
-                <!-- Header -->
-                <div class="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-4">
-                    <div>
-                        <span class="text-xs font-bold uppercase tracking-widest text-green-600 dark:text-green-400">Documento Técnico</span>
-                        <h2 class="text-xl font-black text-gray-900 dark:text-white">Propuesta de Fertilización — {{ $planCode }} (v{{ $version }})</h2>
+        <div class="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 p-4" x-cloak @click.self="$wire.close()">
+            <div
+                class="bg-white dark:bg-[#131B20] rounded-2xl shadow-2xl p-6 sm:p-8 max-w-sm w-full text-center space-y-4 relative border border-gray-100 dark:border-white/10"
+                @click.stop
+            >
+                <button
+                    type="button"
+                    wire:click="close"
+                    class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer"
+                    title="Cerrar"
+                >
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+
+                <div class="mx-auto bg-green-100 dark:bg-green-500/20 rounded-full h-16 w-16 flex items-center justify-center border border-green-500/20">
+                    <i class="fa-solid fa-file-lines text-green-600 dark:text-green-400 text-2xl"></i>
+                </div>
+
+                <div class="space-y-1">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">
+                        Acciones del Plan {{ $planCode }}
+                    </h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        Versión: {{ $version }}
+                    </p>
+                </div>
+
+                {{-- Banner Error --}}
+                @if($errorMessage)
+                    <div class="p-3 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs rounded-xl flex items-center gap-2 text-left border border-red-200 dark:border-red-800/40">
+                        <i class="fa-solid fa-circle-exclamation flex-shrink-0 text-sm"></i>
+                        <span>{{ $errorMessage }}</span>
                     </div>
-                    <button type="button" wire:click="close" class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-white">
-                        <i class="fa-solid fa-xmark text-lg"></i>
+                @endif
+
+                {{-- Banner Status Éxito --}}
+                @if($statusMessage && !$errorMessage)
+                    <div class="p-3 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 text-xs rounded-xl flex items-center gap-2 text-left border border-green-200 dark:border-green-800/40">
+                        <i class="fa-solid fa-circle-check flex-shrink-0 text-sm"></i>
+                        <span>{{ $statusMessage }}</span>
+                    </div>
+                @endif
+
+                {{-- Banners de Carga Reactiva Inmediata --}}
+                <div wire:loading wire:target="download" class="p-3 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs rounded-xl flex items-center gap-2 text-left border border-blue-200 dark:border-blue-800/40 animate-pulse">
+                    <i class="fa-solid fa-spinner fa-spin flex-shrink-0 text-sm"></i>
+                    <span>Preparando documento... Obteniendo PDF del plan para descargar.</span>
+                </div>
+
+                <div wire:loading wire:target="share" class="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs rounded-xl flex items-center gap-2 text-left border border-emerald-200 dark:border-emerald-800/40 animate-pulse">
+                    <i class="fa-solid fa-spinner fa-spin flex-shrink-0 text-sm"></i>
+                    <span>Enviando por WhatsApp... Conectando con el servicio de mensajería.</span>
+                </div>
+
+                {{-- Advertencia Falta Celular Registrado --}}
+                @if($isPhoneMissing || $this->isPhoneMissing)
+                    <div wire:loading.remove wire:target="share, download" class="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs rounded-xl flex items-center gap-2.5 text-left border border-amber-200 dark:border-amber-800/40 shadow-xs">
+                        <i class="fa-solid fa-triangle-exclamation flex-shrink-0 text-base text-amber-600 dark:text-amber-400"></i>
+                        <div class="leading-snug">
+                            <span class="font-bold block">Cliente sin celular registrado</span>
+                            <span class="text-[11px] opacity-90">El cliente no cuenta con número celular en SAP. No es posible compartir por WhatsApp.</span>
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Botones de Acción --}}
+                <div class="flex justify-center gap-3 pt-2">
+                    <button
+                        type="button"
+                        wire:click="share"
+                        wire:loading.attr="disabled"
+                        wire:target="download, share"
+                        @if($isPhoneMissing || $this->isPhoneMissing) disabled title="El cliente no cuenta con celular registrado en SAP" @endif
+                        class="flex-1 bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-xs shadow-md shadow-green-600/20 disabled:bg-gray-400 disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none cursor-pointer"
+                    >
+                        <span wire:loading.remove wire:target="share" class="inline-flex items-center gap-1.5">
+                            <i class="fa-solid fa-share-nodes text-sm"></i>
+                            <span>Compartir</span>
+                        </span>
+                        <span wire:loading wire:target="share" class="inline-flex items-center gap-1.5">
+                            <i class="fa-solid fa-spinner fa-spin text-sm"></i>
+                            <span>Enviando...</span>
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        wire:click="download"
+                        wire:loading.attr="disabled"
+                        wire:target="download, share"
+                        class="flex-1 bg-gray-200 text-gray-800 dark:bg-white/10 dark:text-gray-200 font-bold py-3 px-4 rounded-xl hover:bg-gray-300 dark:hover:bg-white/15 transition-colors flex items-center justify-center gap-2 text-xs disabled:bg-gray-400 disabled:opacity-80 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                        <span wire:loading.remove wire:target="download" class="inline-flex items-center gap-1.5">
+                            <i class="fa-solid fa-download text-sm"></i>
+                            <span>Descargar</span>
+                        </span>
+                        <span wire:loading wire:target="download" class="inline-flex items-center gap-1.5">
+                            <i class="fa-solid fa-spinner fa-spin text-sm"></i>
+                            <span>Descargando...</span>
+                        </span>
                     </button>
                 </div>
 
-                <!-- PDF Preview Frame & WhatsApp Send Form -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 rounded-2xl overflow-hidden border border-gray-200 dark:border-white/10 h-[480px] bg-gray-100 dark:bg-black/20">
-                        @if($pdfBase64)
-                            <iframe src="data:application/pdf;base64,{{ $pdfBase64 }}" class="w-full h-full"></iframe>
-                        @else
-                            <div class="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                                Generando vista previa del documento...
-                            </div>
-                        @endif
-                    </div>
-
-                    <!-- WhatsApp Section (IMP-03) -->
-                    <div class="p-5 rounded-2xl bg-green-50/50 dark:bg-green-950/20 border border-green-100 dark:border-green-500/10 space-y-4 flex flex-col justify-between">
-                        <div class="space-y-3">
-                            <div class="flex items-center gap-2 text-green-800 dark:text-green-300">
-                                <i class="fa-brands fa-whatsapp text-xl text-green-600 dark:text-green-400"></i>
-                                <h3 class="text-sm font-bold">Enviar por WhatsApp</h3>
-                            </div>
-                            <p class="text-xs text-green-700 dark:text-green-400">Envía el plan en PDF directamente al productor mediante UltraMSG.</p>
-
-                            <div>
-                                <label class="block font-bold text-[11px] uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Teléfono (10 dígitos) *</label>
-                                <input type="text" wire:model="recipientPhone" placeholder="Ej: 6671234567" class="w-full h-11 px-3 rounded-xl border border-green-200 dark:border-green-500/20 bg-white dark:bg-[#1A2227] text-xs font-bold text-gray-900 dark:text-white focus:outline-none">
-                                @error('recipientPhone') <span class="text-red-500 text-[11px] mt-1 block">{{ $message }}</span> @enderror
-                            </div>
-
-                            <div>
-                                <label class="block font-bold text-[11px] uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Mensaje Personalizado (Opcional)</label>
-                                <textarea wire:model="customMessage" rows="3" placeholder="Mensaje de acompañamiento..." class="w-full p-2.5 rounded-xl border border-green-200 dark:border-green-500/20 bg-white dark:bg-[#1A2227] text-xs text-gray-900 dark:text-white focus:outline-none"></textarea>
-                            </div>
-                        </div>
-
-                        <div class="space-y-2 pt-3 border-t border-green-200/40 dark:border-green-500/10">
-                            <button type="button" wire:click="sendViaWhatsApp" wire:loading.attr="disabled" class="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
-                                <i class="fa-brands fa-whatsapp text-sm"></i>
-                                <span wire:loading.remove wire:target="sendViaWhatsApp">Enviar Documento</span>
-                                <span wire:loading wire:target="sendViaWhatsApp">Enviando WhatsApp...</span>
-                            </button>
-
-                            @if($pdfBase64)
-                                <a href="data:application/pdf;base64,{{ $pdfBase64 }}" download="Plan_Fertilizacion_{{ $planCode }}.pdf" class="w-full py-2.5 rounded-xl border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 font-bold text-xs text-center block hover:bg-white dark:hover:bg-white/5 transition-colors">
-                                    <i class="fa-solid fa-download mr-1"></i> Descargar PDF
-                                </a>
-                            @endif
-                        </div>
-                    </div>
-                </div>
+                {{-- Botón Cerrar --}}
+                <button
+                    type="button"
+                    wire:click="close"
+                    wire:loading.attr="disabled"
+                    wire:target="download, share"
+                    class="w-full text-xs font-semibold text-gray-600 dark:text-gray-400 mt-2 hover:text-black dark:hover:text-white transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                    Cerrar
+                </button>
             </div>
         </div>
     @endif

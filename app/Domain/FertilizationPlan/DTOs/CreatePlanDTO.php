@@ -50,6 +50,8 @@ final class CreatePlanDTO
         public readonly ?float $targetYield = null,
         public readonly ?string $irrigationSystem = null,
         public readonly array $stages = [],
+        public readonly ?string $salesAdvisorId = null,
+        public readonly ?string $salesAdvisorName = null,
     ) {}
 
     public static function fromArray(array $data): self
@@ -81,6 +83,8 @@ final class CreatePlanDTO
             targetYield: isset($data['targetYield']) ? (float) $data['targetYield'] : null,
             irrigationSystem: $data['irrigationSystem'] ?? null,
             stages: $data['stages'] ?? [],
+            salesAdvisorId: isset($data['salesAdvisorId']) ? (string) $data['salesAdvisorId'] : (isset($data['IDAsesorVenta']) ? (string) $data['IDAsesorVenta'] : null),
+            salesAdvisorName: isset($data['salesAdvisorName']) ? (string) $data['salesAdvisorName'] : (isset($data['NombreAsesorVenta']) ? (string) $data['NombreAsesorVenta'] : null),
         );
     }
 }

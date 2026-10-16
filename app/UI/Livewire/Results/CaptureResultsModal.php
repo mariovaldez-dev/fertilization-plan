@@ -10,6 +10,7 @@ use App\Domain\FertilizationPlan\DTOs\CaptureResultDTO;
 use App\Domain\FertilizationPlan\Repositories\FertilizationPlanRepositoryInterface;
 use App\Domain\WhatsApp\DTOs\WhatsAppMessageDTO;
 use App\Domain\WhatsApp\WhatsAppServiceInterface;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -17,7 +18,11 @@ final class CaptureResultsModal extends Component
 {
     public bool $isOpen = false;
 
+    public bool $isLoading = false;
+
     public string $planCode = '';
+
+    public int $version = 1;
 
     public string $customerName = '';
 
@@ -62,40 +67,108 @@ final class CaptureResultsModal extends Component
     public bool $isSharing = false;
 
     #[On('open-capture-results')]
-    public function open(string $planCode, FertilizationPlanRepositoryInterface $planRepo, ?string $phone = null): void
+    public function open(string $planCode, ?string $phone = null): void
     {
         $this->planCode = $planCode;
         $this->customerPhone = $phone;
         $this->isSuccess = false;
         $this->pdfBase64 = null;
         $this->errorMessage = '';
+        $this->isOpen = true;
+        $this->isLoading = true;
+    }
 
-        $entity = $planRepo->getPlanByCode($planCode);
+    public function loadResultsData(FertilizationPlanRepositoryInterface $planRepo): void
+    {
+        $this->isLoading = true;
+        $this->errorMessage = '';
 
-        if ($entity) {
-            $this->customerName = $entity->customerName;
-            $this->costoTotal = round($entity->calculateTotalPlanCostPerHectare(), 2);
-            $this->costoTradicional = round($this->costoTotal * 1.15, 2);
-            $this->dosis = 1.0;
-            $this->rendimiento = round($entity->targetYield ?? 12.0, 1);
-            $this->rendimientoTradicional = round(($entity->targetYield ?? 10.0) * 0.85, 1);
-            $this->precioCosecha = 5500.0;
-            $this->fechaCosecha = date('Y-m-d');
-            $this->recomendaciones = 'Mantener monitoreo de humedad y balance nutricional.';
-            $this->propuesta = 'Programa nutricional integral Grupo Impulsora.';
-            $this->buenasPracticas = 'Calibración de boquillas y fertirriego programado.';
-            $this->coordenadas = ($entity->latitude && $entity->longitude)
-                ? "{$entity->latitude},{$entity->longitude}"
-                : '25.790466,-108.995888';
+        try {
+            $entity = $planRepo->getPlanByCode($this->planCode);
+
+            if ($entity) {
+                $this->version = $entity->version ?? 1;
+                $this->customerName = $entity->customerName;
+                $this->costoTotal = round($entity->calculateTotalPlanCostPerHectare(), 2);
+                $this->costoTradicional = round($this->costoTotal * 1.15, 2);
+                $this->dosis = 1.0;
+                $this->rendimiento = round($entity->targetYield ?? 12.0, 1);
+                $this->rendimientoTradicional = round(($entity->targetYield ?? 10.0) * 0.85, 1);
+                $this->precioCosecha = 5500.0;
+                $this->fechaCosecha = date('Y-m-d');
+                $this->recomendaciones = 'Mantener monitoreo de humedad y balance nutricional.';
+                $this->propuesta = 'Programa nutricional integral Grupo Impulsora.';
+                $this->buenasPracticas = 'Calibración de boquillas y fertirriego programado.';
+                $this->coordenadas = ($entity->latitude && $entity->longitude)
+                    ? "{$entity->latitude},{$entity->longitude}"
+                    : '25.790466,-108.995888';
+            }
+
+            // Cargar datos previos si ya existía una captura de resultados
+            $existing = $planRepo->getResultsPdfData($this->planCode);
+            if (! empty($existing['planInfo'])) {
+                $info = $existing['planInfo'];
+                if (! empty($info['U_FechaCaptura'])) {
+                    $this->fechaCosecha = substr((string) $info['U_FechaCaptura'], 0, 10);
+                }
+                if (isset($info['RendimientoObtenido']) && (float) $info['RendimientoObtenido'] > 0) {
+                    $this->rendimiento = (float) $info['RendimientoObtenido'];
+                } elseif (isset($info['U_Rendimiento']) && (float) $info['U_Rendimiento'] > 0) {
+                    $this->rendimiento = (float) $info['U_Rendimiento'];
+                }
+                if (isset($info['U_CostoTotal']) && (float) $info['U_CostoTotal'] > 0) {
+                    $this->costoTotal = (float) $info['U_CostoTotal'];
+                }
+                if (isset($info['U_Costo_Trad']) && (float) $info['U_Costo_Trad'] > 0) {
+                    $this->costoTradicional = (float) $info['U_Costo_Trad'];
+                }
+                if (isset($info['U_Dosis']) && (float) $info['U_Dosis'] > 0) {
+                    $this->dosis = (float) $info['U_Dosis'];
+                }
+                if (isset($info['U_Rendimiento_Trad']) && (float) $info['U_Rendimiento_Trad'] > 0) {
+                    $this->rendimientoTradicional = (float) $info['U_Rendimiento_Trad'];
+                }
+                if (isset($info['U_Precio_Cosecha']) && (float) $info['U_Precio_Cosecha'] > 0) {
+                    $this->precioCosecha = (float) $info['U_Precio_Cosecha'];
+                }
+                if (! empty($info['U_Recomendaciones'])) {
+                    $this->recomendaciones = (string) $info['U_Recomendaciones'];
+                }
+                if (! empty($info['U_Propuesta'])) {
+                    $this->propuesta = (string) $info['U_Propuesta'];
+                }
+                if (! empty($info['U_BuenasPracticas'])) {
+                    $this->buenasPracticas = (string) $info['U_BuenasPracticas'];
+                }
+                if (! empty($info['U_Coordenadas'])) {
+                    $this->coordenadas = (string) $info['U_Coordenadas'];
+                }
+            }
 
             $this->recalculateMetrics();
+        } catch (\Throwable $e) {
+            Log::warning('[CaptureResultsModal] Error loading results data', [
+                'planCode' => $this->planCode,
+                'error' => $e->getMessage(),
+            ]);
+        } finally {
+            $this->isLoading = false;
         }
 
-        $this->isOpen = true;
+        Log::info('[CaptureResultsModal] Modal data loaded', [
+            'planCode' => $this->planCode,
+            'version' => $this->version,
+            'customerName' => $this->customerName,
+            'customerPhone' => $this->customerPhone,
+        ]);
     }
 
     public function updated($propertyName): void
     {
+        if ($propertyName === 'rendimiento' && (float) $this->rendimiento > 99.9) {
+            $this->addError('rendimiento', 'El rendimiento no puede ser mayor a 99.9 Ton/Ha.');
+        }
+
         if (in_array($propertyName, ['rendimiento', 'rendimientoTradicional', 'precioCosecha', 'costoTotal', 'costoTradicional'], true)) {
             $this->recalculateMetrics();
         }
@@ -114,9 +187,16 @@ final class CaptureResultsModal extends Component
         $this->retornoInversion = $this->inversionExtra != 0.0 ? round($this->utilidadExtra / $this->inversionExtra, 2) : 0.0;
     }
 
+    public function setCoordinates(float $lat, float $lng): void
+    {
+        $this->coordenadas = number_format($lat, 6, '.', '').','.number_format($lng, 6, '.', '');
+        $this->resetErrorBag('coordenadas');
+    }
+
     public function close(): void
     {
         $this->isOpen = false;
+        $this->isLoading = false;
         $this->isSuccess = false;
         $this->errorMessage = '';
         $this->pdfBase64 = null;
@@ -138,20 +218,35 @@ final class CaptureResultsModal extends Component
             'recomendaciones' => 'required|string|max:500',
             'propuesta' => 'required|string|max:500',
             'buenasPracticas' => 'required|string|max:500',
+            'coordenadas' => 'required|string|max:500',
         ], [
             'fechaCosecha.required' => 'La fecha de cosecha es obligatoria.',
-            'rendimiento.required' => 'El rendimiento obtenido es obligatorio.',
-            'rendimiento.max' => 'El rendimiento no puede exceder 99.9 Ton/Ha.',
+            'rendimiento.required' => 'El rendimiento es obligatorio.',
+            'rendimiento.numeric' => 'Número inválido.',
+            'rendimiento.min' => 'El rendimiento debe ser mayor a 0 Ton/Ha.',
+            'rendimiento.max' => 'El rendimiento no puede ser mayor a 99.9 Ton/Ha.',
+            'rendimientoTradicional.required' => 'El rendimiento tradicional es obligatorio.',
             'dosis.required' => 'La dosis es obligatoria.',
+            'precioCosecha.required' => 'El precio cosecha es obligatorio.',
             'costoTotal.required' => 'El costo total es obligatorio.',
             'costoTradicional.required' => 'El costo tradicional es obligatorio.',
             'recomendaciones.required' => 'Las recomendaciones son obligatorias.',
-            'propuesta.required' => 'La propuesta técnica es obligatoria.',
+            'propuesta.required' => 'La propuesta es obligatoria.',
             'buenasPracticas.required' => 'Las buenas prácticas son obligatorias.',
+            'coordenadas.required' => 'La ubicación de la parcela es obligatoria.',
         ]);
 
         $this->isSaving = true;
         $this->errorMessage = '';
+        $startTime = microtime(true);
+
+        Log::info('[CaptureResultsModal] Saving final results', [
+            'planCode' => $this->planCode,
+            'rendimiento' => $this->rendimiento,
+            'costoTotal' => $this->costoTotal,
+            'utilidadExtra' => $this->utilidadExtra,
+            'retornoInversion' => $this->retornoInversion,
+        ]);
 
         try {
             $dto = new CaptureResultDTO(
@@ -174,23 +269,43 @@ final class CaptureResultsModal extends Component
 
             $result = $useCase->execute($dto);
 
-            if (! empty($result['estado']) && $result['estado'] === 1) {
-                $this->errorMessage = $result['mensaje'] ?? 'Error al guardar resultados en el servidor.';
+            if (! ($result['success'] ?? false)) {
+                $this->errorMessage = $result['message'] ?? 'Error al guardar resultados en el servidor.';
                 $this->isSaving = false;
+                Log::warning('[CaptureResultsModal] Save results rejected by API', [
+                    'planCode' => $this->planCode,
+                    'result' => $result,
+                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                ]);
 
                 return;
             }
 
             // Generar y almacenar PDF de resultados en base64
             try {
-                $pdfBinary = $pdfUseCase->execute($this->planCode);
-                $this->pdfBase64 = base64_encode($pdfBinary);
-                $planRepo->saveResultsPdf($this->planCode, 1, 'Resultados', $this->pdfBase64);
+                $pdfResult = $pdfUseCase->execute($this->planCode);
+                $this->pdfBase64 = is_array($pdfResult) ? ($pdfResult['pdfBase64'] ?? null) : base64_encode($pdfResult);
+                if (! empty($this->pdfBase64)) {
+                    $planRepo->saveResultsPdf($this->planCode, $this->version, 'Resultados', $this->pdfBase64);
+                }
+                Log::info('[CaptureResultsModal] Results PDF generated and stored in DB', [
+                    'planCode' => $this->planCode,
+                    'version' => $this->version,
+                    'bytes' => strlen($this->pdfBase64 ?? ''),
+                ]);
             } catch (\Throwable $pdfError) {
-                // PDF fallback silencioso si DomPDF requiere ajustes
+                Log::warning('[CaptureResultsModal] Results PDF generation fallback error', [
+                    'planCode' => $this->planCode,
+                    'error' => $pdfError->getMessage(),
+                ]);
             }
 
             $this->isSuccess = true;
+            Log::info('[CaptureResultsModal] Final results saved successfully', [
+                'planCode' => $this->planCode,
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
+
             $this->dispatch('plan-results-updated');
             $this->dispatch('notify', [
                 'type' => 'success',
@@ -198,6 +313,11 @@ final class CaptureResultsModal extends Component
             ]);
         } catch (\Throwable $e) {
             $this->errorMessage = 'Error: '.$e->getMessage();
+            Log::error('[CaptureResultsModal] Exception saving final results', [
+                'planCode' => $this->planCode,
+                'error' => $e->getMessage(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
         } finally {
             $this->isSaving = false;
         }
@@ -205,10 +325,32 @@ final class CaptureResultsModal extends Component
 
     public function downloadPdf(GenerateResultsPdfUseCase $pdfUseCase)
     {
+        $startTime = microtime(true);
+        Log::info('[CaptureResultsModal] Download results PDF initiated', [
+            'planCode' => $this->planCode,
+            'cached' => ! empty($this->pdfBase64),
+        ]);
+
         try {
-            $pdfContent = ! empty($this->pdfBase64)
-                ? base64_decode($this->pdfBase64)
-                : $pdfUseCase->execute($this->planCode);
+            $pdfContent = null;
+            if (! empty($this->pdfBase64)) {
+                $pdfContent = base64_decode($this->pdfBase64);
+            } else {
+                $pdfResult = $pdfUseCase->execute($this->planCode);
+                $base64 = is_array($pdfResult) ? ($pdfResult['pdfBase64'] ?? null) : base64_encode($pdfResult);
+                $this->pdfBase64 = $base64;
+                $pdfContent = ! empty($base64) ? base64_decode($base64) : null;
+            }
+
+            if (empty($pdfContent)) {
+                throw new \RuntimeException('No se pudo generar el contenido del PDF de resultados.');
+            }
+
+            Log::info('[CaptureResultsModal] Results PDF download prepared', [
+                'planCode' => $this->planCode,
+                'bytes' => strlen($pdfContent),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
 
             return response()->streamDownload(
                 function () use ($pdfContent) {
@@ -218,6 +360,12 @@ final class CaptureResultsModal extends Component
                 ['Content-Type' => 'application/pdf']
             );
         } catch (\Throwable $e) {
+            Log::error('[CaptureResultsModal] Results PDF download failed', [
+                'planCode' => $this->planCode,
+                'error' => $e->getMessage(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
+
             $this->dispatch('notify', [
                 'type' => 'error',
                 'message' => 'Error al descargar PDF: '.$e->getMessage(),
@@ -225,24 +373,43 @@ final class CaptureResultsModal extends Component
         }
     }
 
+    public function getIsCustomerPhoneMissingProperty(): bool
+    {
+        $phone = preg_replace('/\D/', '', (string) $this->customerPhone);
+
+        return strlen($phone) < 10;
+    }
+
     public function shareWhatsApp(WhatsAppServiceInterface $whatsApp): void
     {
-        if (empty($this->customerPhone)) {
+        $phone = preg_replace('/\D/', '', (string) $this->customerPhone);
+        if (strlen($phone) < 10) {
+            Log::warning('[CaptureResultsModal] WhatsApp share blocked: phone is missing', [
+                'planCode' => $this->planCode,
+            ]);
+
             $this->dispatch('notify', [
                 'type' => 'error',
-                'message' => 'Falta el número de celular del cliente para compartir vía WhatsApp.',
+                'message' => 'No se puede compartir: El cliente no cuenta con número celular registrado en SAP.',
             ]);
 
             return;
         }
 
         $this->isSharing = true;
+        $startTime = microtime(true);
+
+        Log::info('[CaptureResultsModal] WhatsApp share initiated', [
+            'planCode' => $this->planCode,
+            'customerPhone' => $phone,
+            'cached' => ! empty($this->pdfBase64),
+        ]);
 
         try {
             $message = "Hola {$this->customerName} 👋\nYa tengo lista la captura de resultados de tu Plan de Fertilización #{$this->planCode}.\n📊 Aquí podrás revisar cómo se aplicó el programa, los costos y el rendimiento final obtenido.";
 
             $msgDto = new WhatsAppMessageDTO(
-                recipientPhone: preg_replace('/\D/', '', (string) $this->customerPhone),
+                recipientPhone: $phone,
                 customerName: $this->customerName,
                 documentBase64: (string) $this->pdfBase64,
                 caption: $message,
@@ -252,17 +419,36 @@ final class CaptureResultsModal extends Component
             $result = $whatsApp->sendPlanDocument($msgDto);
 
             if ($result) {
+                Log::info('[CaptureResultsModal] WhatsApp share succeeded', [
+                    'planCode' => $this->planCode,
+                    'customerPhone' => $phone,
+                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                ]);
+
                 $this->dispatch('notify', [
                     'type' => 'success',
                     'message' => 'Dictamen de resultados compartido vía WhatsApp exitosamente.',
                 ]);
             } else {
+                Log::warning('[CaptureResultsModal] WhatsApp share failed via UltraMSG', [
+                    'planCode' => $this->planCode,
+                    'customerPhone' => $phone,
+                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                ]);
+
                 $this->dispatch('notify', [
                     'type' => 'error',
                     'message' => 'No se pudo enviar el documento vía WhatsApp. Verifica el número telefónico.',
                 ]);
             }
         } catch (\Throwable $e) {
+            Log::error('[CaptureResultsModal] WhatsApp share exception', [
+                'planCode' => $this->planCode,
+                'customerPhone' => $phone,
+                'error' => $e->getMessage(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
+
             $this->dispatch('notify', [
                 'type' => 'error',
                 'message' => 'Error al compartir: '.$e->getMessage(),

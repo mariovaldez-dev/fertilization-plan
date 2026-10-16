@@ -186,13 +186,39 @@
                         <td class="info-label">Productor:</td>
                         <td class="info-value">{{ $plan['productor'] ?? $plan['customerName'] ?? $plan['CardName'] ?? 'N/A' }}</td>
                     </tr>
+                    @php
+                        $asesorTecnicoDisplay = (string) ($plan['tecnicoCampo'] ?? $plan['asesorTecnico'] ?? $plan['AsesorTecnicoName'] ?? $plan['advisorName'] ?? 'N/A');
+                        if (str_contains($asesorTecnicoDisplay, '@')) {
+                            $prefix = explode('@', $asesorTecnicoDisplay)[0];
+                            $words = preg_split('/[._-]/', $prefix);
+                            $asesorTecnicoDisplay = ucwords(implode(' ', array_filter($words ?: [$prefix])));
+                        }
+
+                        $sessionUserName = (string) (session('authenticated_user')?->name ?? '');
+                        if (str_contains($sessionUserName, '@')) {
+                            $prefix = explode('@', $sessionUserName)[0];
+                            $words = preg_split('/[._-]/', $prefix);
+                            $sessionUserName = ucwords(implode(' ', array_filter($words ?: [$prefix])));
+                        }
+
+                        $asesorVentasDisplay = (string) ($plan['asesorVentas'] ?? $plan['AsesorVentasName'] ?? '');
+                        if (str_contains($asesorVentasDisplay, '@')) {
+                            $prefix = explode('@', $asesorVentasDisplay)[0];
+                            $words = preg_split('/[._-]/', $prefix);
+                            $asesorVentasDisplay = ucwords(implode(' ', array_filter($words ?: [$prefix])));
+                        }
+
+                        if (empty($asesorVentasDisplay) || $asesorVentasDisplay === $asesorTecnicoDisplay) {
+                            $asesorVentasDisplay = !empty($sessionUserName) ? $sessionUserName : ($plan['SlpName'] ?? 'Asesor Comercial');
+                        }
+                    @endphp
                     <tr>
                         <td class="info-label">Asesor Ventas:</td>
-                        <td class="info-value">{{ $plan['asesorVentas'] ?? $plan['advisorName'] ?? $plan['SlpName'] ?? 'No disponible' }}</td>
+                        <td class="info-value">{{ $asesorVentasDisplay }}</td>
                     </tr>
                     <tr>
                         <td class="info-label">Asesor Técnico:</td>
-                        <td class="info-value">{{ $plan['tecnicoCampo'] ?? $plan['asesorTecnico'] ?? $plan['advisorName'] ?? 'N/A' }}</td>
+                        <td class="info-value">{{ $asesorTecnicoDisplay }}</td>
                     </tr>
                     <tr>
                         <td class="info-label">Territorio:</td>

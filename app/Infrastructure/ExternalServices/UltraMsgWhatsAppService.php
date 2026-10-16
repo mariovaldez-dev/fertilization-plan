@@ -27,11 +27,19 @@ final class UltraMsgWhatsAppService implements WhatsAppServiceInterface
 
     public function sendDocument(WhatsAppMessageDTO $message): array
     {
-        try {
-            $formattedBase64 = str_starts_with($message->pdfBase64, 'data:application/pdf;base64,')
-                ? $message->pdfBase64
-                : "data:application/pdf;base64,{$message->pdfBase64}";
+        $startTime = microtime(true);
+        $formattedBase64 = str_starts_with($message->pdfBase64, 'data:application/pdf;base64,')
+            ? $message->pdfBase64
+            : "data:application/pdf;base64,{$message->pdfBase64}";
 
+        Log::info('[UltraMsgWhatsAppService] Sending WhatsApp document via UltraMSG', [
+            'to' => $message->recipientPhone,
+            'filename' => $message->fileName,
+            'customerName' => $message->customerName,
+            'payload_bytes' => strlen($formattedBase64),
+        ]);
+
+        try {
             $payload = [
                 'token' => $this->token,
                 'to' => $message->recipientPhone,
@@ -45,6 +53,12 @@ final class UltraMsgWhatsAppService implements WhatsAppServiceInterface
             if ($response->successful()) {
                 $data = $response->json();
                 if (! empty($data['sent'])) {
+                    Log::info('[UltraMsgWhatsAppService] WhatsApp document sent successfully', [
+                        'to' => $message->recipientPhone,
+                        'message_id' => $data['id'] ?? null,
+                        'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                    ]);
+
                     return [
                         'success' => true,
                         'message' => '¡El plan fue enviado exitosamente por WhatsApp!',
@@ -52,9 +66,11 @@ final class UltraMsgWhatsAppService implements WhatsAppServiceInterface
                 }
             }
 
-            Log::error('UltraMSG WhatsApp error response', [
+            Log::error('[UltraMsgWhatsAppService] UltraMSG WhatsApp error response', [
+                'to' => $message->recipientPhone,
                 'status' => $response->status(),
                 'body' => $response->body(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
             ]);
 
             return [
@@ -62,7 +78,11 @@ final class UltraMsgWhatsAppService implements WhatsAppServiceInterface
                 'message' => 'Error al enviar por WhatsApp: '.($response->json('error.message') ?? 'Error en el servicio de mensajería.'),
             ];
         } catch (Throwable $e) {
-            Log::error('Exception in UltraMsgWhatsAppService::sendDocument', ['error' => $e->getMessage()]);
+            Log::error('[UltraMsgWhatsAppService] Exception in sendDocument', [
+                'to' => $message->recipientPhone,
+                'error' => $e->getMessage(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
 
             return [
                 'success' => false,

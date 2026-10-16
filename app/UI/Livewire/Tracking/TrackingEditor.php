@@ -8,6 +8,7 @@ use App\Application\UseCases\Plans\SaveTrackingUseCase;
 use App\Domain\Catalogs\Repositories\CatalogsRepositoryInterface;
 use App\Domain\FertilizationPlan\DTOs\UpdateTrackingDTO;
 use App\Domain\FertilizationPlan\Repositories\FertilizationPlanRepositoryInterface;
+use Illuminate\Support\Facades\Log;
 use Livewire\Component;
 
 final class TrackingEditor extends Component
@@ -29,6 +30,7 @@ final class TrackingEditor extends Component
         FertilizationPlanRepositoryInterface $planRepo,
         CatalogsRepositoryInterface $catalogs
     ): void {
+        $startTime = microtime(true);
         $this->planCode = $planCode;
         $entity = $planRepo->getPlanByCode($planCode);
 
@@ -49,6 +51,13 @@ final class TrackingEditor extends Component
         }
 
         $this->availableProducts = $catalogs->getProducts();
+
+        Log::info('[TrackingEditor] Component mounted', [
+            'planCode' => $planCode,
+            'stages_count' => count($this->stages),
+            'isReadOnly' => $this->isReadOnly,
+            'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+        ]);
     }
 
     public function addImpulsoraProduct(int $stageIndex): void
@@ -92,6 +101,10 @@ final class TrackingEditor extends Component
     public function saveTracking(SaveTrackingUseCase $useCase): void
     {
         if ($this->isReadOnly) {
+            Log::warning('[TrackingEditor] Save tracking blocked: plan is read-only', [
+                'planCode' => $this->planCode,
+            ]);
+
             $this->dispatch('notify', [
                 'type' => 'error',
                 'message' => 'Este plan está cerrado o en modo solo lectura.',
@@ -100,27 +113,57 @@ final class TrackingEditor extends Component
             return;
         }
 
-        $dto = new UpdateTrackingDTO(
-            planCode: $this->planCode,
-            isTestigo: false,
-            stages: $this->stages,
-        );
+        $startTime = microtime(true);
+        Log::info('[TrackingEditor] Saving tracking stages', [
+            'planCode' => $this->planCode,
+            'stages_count' => count($this->stages),
+        ]);
 
-        $result = $useCase->execute($dto);
+        try {
+            $dto = new UpdateTrackingDTO(
+                planCode: $this->planCode,
+                isTestigo: false,
+                stages: $this->stages,
+            );
 
-        if (! empty($result['estado']) && $result['estado'] === 1) {
-            $this->dispatch('notify', [
-                'type' => 'error',
-                'message' => $result['mensaje'] ?? 'Error al guardar el seguimiento.',
+            $result = $useCase->execute($dto);
+
+            if (! empty($result['estado']) && $result['estado'] === 1) {
+                Log::warning('[TrackingEditor] Tracking save error response', [
+                    'planCode' => $this->planCode,
+                    'result' => $result,
+                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                ]);
+
+                $this->dispatch('notify', [
+                    'type' => 'error',
+                    'message' => $result['mensaje'] ?? 'Error al guardar el seguimiento.',
+                ]);
+
+                return;
+            }
+
+            Log::info('[TrackingEditor] Tracking saved successfully', [
+                'planCode' => $this->planCode,
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
             ]);
 
-            return;
-        }
+            $this->dispatch('notify', [
+                'type' => 'success',
+                'message' => 'Seguimiento guardado correctamente.',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[TrackingEditor] Exception saving tracking', [
+                'planCode' => $this->planCode,
+                'error' => $e->getMessage(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
 
-        $this->dispatch('notify', [
-            'type' => 'success',
-            'message' => 'Seguimiento guardado correctamente.',
-        ]);
+            $this->dispatch('notify', [
+                'type' => 'error',
+                'message' => 'Error al guardar: '.$e->getMessage(),
+            ]);
+        }
     }
 
     public function render()

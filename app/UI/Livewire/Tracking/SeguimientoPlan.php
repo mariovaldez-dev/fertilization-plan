@@ -7,6 +7,7 @@ namespace App\UI\Livewire\Tracking;
 use App\Domain\Catalogs\Repositories\CatalogsRepositoryInterface;
 use App\Domain\FertilizationPlan\DTOs\UpdateTrackingDTO;
 use App\Domain\FertilizationPlan\Repositories\FertilizationPlanRepositoryInterface;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 
@@ -29,7 +30,7 @@ final class SeguimientoPlan extends Component
 
     public array $metodosAplicacion = [];
 
-    public bool $isLoading = false;
+    public bool $isLoading = true;
 
     public bool $isSaving = false;
 
@@ -50,15 +51,38 @@ final class SeguimientoPlan extends Component
             $this->cultivoId = $cultivoId;
         }
 
-        $this->productosList = $catalogs->getProducts();
-        $this->metodosAplicacion = $catalogs->getApplicationMethods();
-        $this->cargarDetallePlan($planRepo);
+        $this->isLoading = true;
+
+        if (app()->runningUnitTests()) {
+            $this->productosList = $catalogs->getProducts();
+            $this->metodosAplicacion = $catalogs->getApplicationMethods();
+            $this->cargarDetallePlan($planRepo, $catalogs);
+        }
     }
 
-    public function cargarDetallePlan(FertilizationPlanRepositoryInterface $planRepo): void
-    {
+    public function cargarDetallePlan(
+        ?FertilizationPlanRepositoryInterface $planRepo = null,
+        ?CatalogsRepositoryInterface $catalogs = null
+    ): void {
+        $planRepo = $planRepo ?? app(FertilizationPlanRepositoryInterface::class);
+        $catalogs = $catalogs ?? app(CatalogsRepositoryInterface::class);
+
         $this->isLoading = true;
         $this->errorMessage = '';
+
+        if (empty($this->productosList)) {
+            $this->productosList = $catalogs->getProducts();
+        }
+        if (empty($this->metodosAplicacion)) {
+            $this->metodosAplicacion = $catalogs->getApplicationMethods();
+        }
+
+        $startTime = microtime(true);
+
+        Log::info('[SeguimientoPlan] Loading tracking detail', [
+            'planCode' => $this->planCode,
+            'cultivoId' => $this->cultivoId,
+        ]);
 
         try {
             $planEntity = $planRepo->getPlanByCode($this->planCode);
@@ -156,10 +180,53 @@ final class SeguimientoPlan extends Component
                     ];
                 }
             }
+
+            Log::info('[SeguimientoPlan] Plan detail loaded', [
+                'planCode' => $this->planCode,
+                'stages_count' => count($this->etapas),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
         } catch (\Throwable $e) {
             $this->errorMessage = 'Error al cargar el plan: '.$e->getMessage();
+            Log::error('[SeguimientoPlan] Error loading plan detail', [
+                'planCode' => $this->planCode,
+                'error' => $e->getMessage(),
+            ]);
         } finally {
             $this->isLoading = false;
+        }
+    }
+
+    public function updated($propertyName, $value): void
+    {
+        // Sincronización reactiva al cambiar tipo de producto (Impulsora vs Otros)
+        if (preg_match('/etapas\.(\d+)\.productos\.(\d+)\.tipo/', $propertyName, $matches)) {
+            $eIndex = (int) $matches[1];
+            $pIndex = (int) $matches[2];
+
+            if ($value === 'otros') {
+                $this->etapas[$eIndex]['productos'][$pIndex]['idProducto'] = '';
+                $this->etapas[$eIndex]['productos'][$pIndex]['nombreProducto'] = '';
+                $this->etapas[$eIndex]['productos'][$pIndex]['Proveedor'] = '';
+                $this->etapas[$eIndex]['productos'][$pIndex]['precio'] = 0.0;
+            } else {
+                $this->etapas[$eIndex]['productos'][$pIndex]['idProducto'] = '';
+                $this->etapas[$eIndex]['productos'][$pIndex]['nombreProducto'] = '';
+                $this->etapas[$eIndex]['productos'][$pIndex]['Proveedor'] = 'GRUPO IMPULSORA';
+                $this->etapas[$eIndex]['productos'][$pIndex]['precio'] = 0.0;
+            }
+        }
+    }
+
+    public function seleccionarProductoImpulsora(int $etapaIndex, int $productoIndex, string $itemCode): void
+    {
+        $this->etapas[$etapaIndex]['productos'][$productoIndex]['idProducto'] = $itemCode;
+        foreach ($this->productosList as $p) {
+            $code = (string) ($p['ItemCode'] ?? $p['itemCode'] ?? '');
+            if ($code === $itemCode) {
+                $this->etapas[$etapaIndex]['productos'][$productoIndex]['nombreProducto'] = (string) ($p['ItemName'] ?? $p['name'] ?? '');
+                break;
+            }
         }
     }
 
@@ -200,7 +267,7 @@ final class SeguimientoPlan extends Component
             return;
         }
 
-        // Validaciones idénticas al proyecto React
+        // Validaciones idénticas al proyecto React (SeguimientoPlan.jsx)
         foreach ($this->etapas as $st) {
             if (empty($st['productos'])) {
                 $this->errorMessage = "Debe agregar al menos un producto en la etapa: \"{$st['nombreEtapa']}\".";
@@ -226,7 +293,7 @@ final class SeguimientoPlan extends Component
 
             foreach ($st['productos'] as $p) {
                 $pTipo = $p['tipo'] ?? 'impulsora';
-                $prodNombre = $p['nombreProducto'] ?: ($p['idProducto'] ?: 'Producto');
+                $prodNombre = ($p['nombreProducto'] ?? '') ?: (($p['idProducto'] ?? '') ?: 'Producto sin nombre');
 
                 if ($pTipo === 'impulsora' && empty($p['idProducto'])) {
                     $this->errorMessage = "Falta seleccionar un producto \"Impulsora\" en la etapa: \"{$st['nombreEtapa']}\".";
@@ -242,6 +309,14 @@ final class SeguimientoPlan extends Component
                     return;
                 }
 
+                $precioNum = (float) ($p['precio'] ?? 0);
+                if (trim((string) ($p['precio'] ?? '')) === '' || $precioNum < 0) {
+                    $this->errorMessage = "Falta capturar un precio válido para el producto \"{$prodNombre}\" en la etapa: \"{$st['nombreEtapa']}\".";
+                    $this->isSaving = false;
+
+                    return;
+                }
+
                 $dosis = (float) ($p['dosis'] ?? 0);
                 if ($dosis <= 0) {
                     $this->errorMessage = "La dosis para el producto \"{$prodNombre}\" en la etapa: \"{$st['nombreEtapa']}\" debe ser mayor a cero.";
@@ -251,6 +326,12 @@ final class SeguimientoPlan extends Component
                 }
             }
         }
+
+        $startTime = microtime(true);
+        Log::info('[SeguimientoPlan] Saving tracking stages', [
+            'planCode' => $this->planCode,
+            'stages_count' => count($this->etapas),
+        ]);
 
         try {
             $dto = new UpdateTrackingDTO(
@@ -263,23 +344,53 @@ final class SeguimientoPlan extends Component
             if (! empty($result['success']) && $result['success']) {
                 $this->successMessage = $result['message'] ?? '¡Seguimiento guardado exitosamente!';
                 $this->showSuccessModal = true;
+                Log::info('[SeguimientoPlan] Tracking stages saved successfully', [
+                    'planCode' => $this->planCode,
+                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                ]);
+
                 $this->dispatch('notify', [
                     'type' => 'success',
                     'message' => $this->successMessage,
                 ]);
             } else {
                 $this->errorMessage = $result['message'] ?? 'Error al guardar el seguimiento.';
+                Log::warning('[SeguimientoPlan] Tracking save returned error', [
+                    'planCode' => $this->planCode,
+                    'result' => $result,
+                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                ]);
             }
         } catch (\Throwable $e) {
             $this->errorMessage = 'Error de conexión: '.$e->getMessage();
+            Log::error('[SeguimientoPlan] Exception saving tracking stages', [
+                'planCode' => $this->planCode,
+                'error' => $e->getMessage(),
+                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            ]);
         } finally {
             $this->isSaving = false;
         }
     }
 
+    public function getTotalProductsCountProperty(): int
+    {
+        $count = 0;
+        foreach ($this->etapas as $st) {
+            $count += count($st['productos'] ?? []);
+        }
+
+        return $count;
+    }
+
+    public function getTotalStagesCountProperty(): int
+    {
+        return count($this->etapas);
+    }
+
     public function render()
     {
         return view('livewire.tracking.seguimiento-plan')
-            ->layout('layouts.app', ['title' => 'Edición de Seguimiento']);
+            ->layout('layouts.app', ['title' => 'Registro de Seguimiento']);
     }
 }

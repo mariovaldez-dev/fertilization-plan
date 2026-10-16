@@ -41,5 +41,7 @@ interface FertilizationPlanRepositoryInterface
 
     public function getPlanForVersioning(string $planCode): array;
 
+    public function getStoredPlanPdf(string $planCode, int $version, string $status = 'Activo'): ?string;
+
     public function versionPlanFull(string $planCode, array $master, array $stages): array;
 }

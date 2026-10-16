@@ -35,7 +35,58 @@ class AuthRepository implements IAuthRepository
                 }
 
                 $id = (int) ($userData['id'] ?? $userData['codigoAsesor'] ?? $userData['id_usuario'] ?? 1);
-                $name = (string) ($userData['name'] ?? $userData['nombre'] ?? $userData['nombreAsesor'] ?? $username);
+                $name = (string) (
+                    $userData['Name'] ??
+                    $userData['name'] ??
+                    $userData['SlpName'] ??
+                    $userData['slpName'] ??
+                    $userData['nombre'] ??
+                    $userData['Nombre'] ??
+                    $userData['nombreAsesor'] ??
+                    $userData['NombreAsesor'] ??
+                    $userData['nombre_completo'] ??
+                    $userData['full_name'] ??
+                    $userData['Asesor'] ??
+                    $userData['asesor'] ??
+                    ''
+                );
+
+                // Si el nombre viene vacío o es un correo, buscar el nombre real en el catálogo de asesores
+                if ((empty($name) || str_contains($name, '@')) && ! empty($token)) {
+                    try {
+                        $searchPrefix = explode('@', $username)[0];
+                        $advRes = Http::withToken($token)
+                            ->timeout(4)
+                            ->get("{$apiUrl}/asesores/buscar", ['nombre' => $searchPrefix]);
+
+                        if ($advRes->successful()) {
+                            $advList = $advRes->json('data') ?? $advRes->json('asesores') ?? $advRes->json();
+                            if (is_array($advList) && ! empty($advList)) {
+                                foreach ($advList as $adv) {
+                                    $advEmail = strtolower((string) ($adv['U_correo'] ?? $adv['email'] ?? ''));
+                                    $advName = (string) ($adv['SlpName'] ?? $adv['AdvisorName'] ?? $adv['Name'] ?? '');
+                                    if ($advEmail === strtolower($username) && ! empty($advName)) {
+                                        $name = $advName;
+                                        break;
+                                    }
+                                }
+                                if ((empty($name) || str_contains($name, '@')) && ! empty($advList[0]['SlpName'] ?? $advList[0]['Name'])) {
+                                    $name = (string) ($advList[0]['SlpName'] ?? $advList[0]['Name']);
+                                }
+                            }
+                        }
+                    } catch (\Throwable) {
+                        // Continuar si la consulta de catálogo falla
+                    }
+                }
+
+                // Fallback: si aún es un correo o vacío, formatear humanamente el prefijo del usuario
+                if (empty($name) || str_contains($name, '@')) {
+                    $prefix = explode('@', $username)[0];
+                    $cleanWords = preg_split('/[._-]/', $prefix);
+                    $name = ucwords(implode(' ', array_filter($cleanWords ?: [$prefix])));
+                }
+
                 $email = (string) ($userData['email'] ?? (str_contains($username, '@') ? $username : $username.'@impulsora.com'));
                 $rol = (string) ($userData['rol'] ?? $userData['role'] ?? $userData['rolAsesor'] ?? 'ASESOR');
                 $zona = ! empty($userData['zona']) ? (string) $userData['zona'] : (! empty($userData['zonaAsesor']) ? (string) $userData['zonaAsesor'] : null);

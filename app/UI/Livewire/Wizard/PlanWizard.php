@@ -15,6 +15,7 @@ use App\Infrastructure\Pdf\DomPdfService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Rule;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -37,6 +38,11 @@ final class PlanWizard extends Component
     public string $advisorName = '';
 
     public string $advisorPhone = '';
+
+    public string $customerPhone = '';
+
+    #[Url]
+    public ?string $phone = null;
 
     public bool $isSharingWhatsApp = false;
 
@@ -162,6 +168,10 @@ final class PlanWizard extends Component
         if (! empty($planCode)) {
             $this->isVersioning = true;
             $this->basePlanCode = $planCode;
+            $this->currentStep = 3;
+        }
+        if (! empty($this->phone)) {
+            $this->customerPhone = $this->phone;
         }
     }
 
@@ -194,19 +204,23 @@ final class PlanWizard extends Component
             if ($entity) {
                 $this->customerCode = $entity->customerCode;
                 $this->customerName = $entity->customerName;
+                $this->parcela = $entity->parcela;
                 $this->advisorId = $entity->advisorId;
                 $this->advisorName = $entity->advisorName;
                 $this->zone = $entity->zone;
                 $this->territory = $entity->territory;
                 $this->hectares = $entity->hectares;
                 $this->soilType = $entity->soilType;
+                $this->analisisSuelo = $entity->hasSoilAnalysis ? 'SI' : 'NO';
                 $this->latitude = $entity->latitude;
                 $this->longitude = $entity->longitude;
                 $this->previousCrop = $entity->previousCrop;
                 $this->previousCropYield = $entity->previousCropYield;
+                $this->previousCropMaxYield = $entity->previousCropMaxYield;
                 $this->currentCropCode = $entity->currentCropCode;
                 $this->currentCropName = $entity->currentCropName;
                 $this->estimatedSowingDate = $entity->estimatedSowingDate;
+                $this->seedVariety = $entity->seedVariety;
                 $this->targetYield = $entity->targetYield;
                 $this->baseVersion = $entity->version;
                 $this->newVersion = $this->baseVersion + 1;
@@ -238,24 +252,85 @@ final class PlanWizard extends Component
         $m = $planData['maestro'] ?? [];
         $this->customerCode = (string) ($m['CardCode'] ?? '');
         $this->customerName = (string) ($m['CardName'] ?? '');
+        if (! empty($m['CellularCliente'])) {
+            $this->customerPhone = (string) $m['CellularCliente'];
+        }
         $this->parcela = (string) ($m['Parcela'] ?? 'Parcela 1');
         $this->zone = (string) ($m['U_Zona'] ?? $m['Zona'] ?? '');
         $this->territory = (string) ($m['U_Territorio'] ?? $m['Territorio'] ?? '');
         $this->hectares = (float) ($m['Superficie'] ?? $m['U_Superficie'] ?? 1.0);
         $this->soilType = (string) ($m['CodeTipoSuelo'] ?? $m['U_Code_Tipo_Suelo'] ?? '');
+        $this->analisisSuelo = (string) ($m['AnalisisSuelo'] ?? $m['U_Analisis_Suelo'] ?? 'NO');
         $this->advisorId = (string) ($m['IDAsesorAgr'] ?? $m['SlpCode'] ?? '');
         $this->advisorName = (string) ($m['U_Asesor'] ?? $m['SlpName'] ?? '');
         $this->advisorPhone = (string) ($m['Cellular'] ?? '');
-        $this->previousCrop = $m['CodeCultAnterior'] ?? null;
+        $this->previousCrop = (string) ($m['CodeCultAnterior'] ?? '');
         $this->previousCropYield = isset($m['RendimientoReal']) ? (float) $m['RendimientoReal'] : null;
+        $this->previousCropMaxYield = isset($m['RendimientoMax']) ? (float) $m['RendimientoMax'] : (isset($m['U_Rendimiento_Max']) ? (float) $m['U_Rendimiento_Max'] : null);
         $this->currentCropCode = (string) ($m['CodeCultivo'] ?? $m['U_Code_Cultivo'] ?? '');
         $this->currentCropName = (string) ($planData['cultivoNombre'] ?? $m['nombrecultivo'] ?? 'Cultivo');
         $this->estimatedSowingDate = isset($m['FechaSiembra']) ? explode('T', (string) $m['FechaSiembra'])[0] : null;
         $this->seedVariety = (string) ($m['VariedadSemilla'] ?? '');
         $this->targetYield = isset($m['ObjetivoProd']) ? (float) $m['ObjetivoProd'] : null;
-        $rawVersion = preg_replace('/\D/', '', (string) ($m['U_Version'] ?? '1'));
+        $rawVersion = preg_replace('/\D/', '', (string) ($m['VersionActual'] ?? $m['U_Version'] ?? '1'));
         $this->baseVersion = (int) ($rawVersion ?: 1);
         $this->newVersion = $this->baseVersion + 1;
+
+        if (! empty($this->customerCode) && (empty($this->customerName) || empty($this->customerPhone))) {
+            try {
+                $custs = $catalogs->searchCustomers($this->customerCode);
+                $matchedCust = collect($custs)->first(fn ($c) => ($c['CardCode'] ?? '') === $this->customerCode);
+                if ($matchedCust) {
+                    if (empty($this->customerName)) {
+                        $this->customerName = (string) ($matchedCust['CardName'] ?? '');
+                    }
+                    if (empty($this->customerPhone)) {
+                        $this->customerPhone = (string) ($matchedCust['Cellular'] ?? '');
+                    }
+                    if (empty($this->zone) && ! empty($matchedCust['Zone'])) {
+                        $this->zone = (string) $matchedCust['Zone'];
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('[PlanWizard] Error al buscar cliente para versionado', ['error' => $e->getMessage()]);
+            }
+        }
+
+        if (empty($this->advisorName) && ! empty($this->advisorId)) {
+            try {
+                $advs = $catalogs->searchAdvisors($this->advisorId);
+                $matchedAdv = collect($advs)->first(fn ($a) => (string) ($a['SlpCode'] ?? $a['id'] ?? '') === (string) $this->advisorId);
+                if ($matchedAdv) {
+                    $this->advisorName = (string) ($matchedAdv['SlpName'] ?? $matchedAdv['name'] ?? '');
+                    if (empty($this->advisorPhone) && ! empty($matchedAdv['Cellular'])) {
+                        $this->advisorPhone = (string) $matchedAdv['Cellular'];
+                    }
+                    if (empty($this->zone) && ! empty($matchedAdv['Zona'])) {
+                        $this->zone = (string) $matchedAdv['Zona'];
+                    }
+                    if (empty($this->territory) && ! empty($matchedAdv['Territorio'])) {
+                        $this->territory = (string) $matchedAdv['Territorio'];
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('[PlanWizard] Error al buscar asesor por ID para versionado', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $authUser = session('authenticated_user');
+        if (empty($this->advisorName) && $authUser) {
+            $this->advisorName = $authUser->name ?? '';
+            if (empty($this->advisorPhone) && ! empty($authUser->phone)) {
+                $this->advisorPhone = (string) $authUser->phone;
+            }
+        }
+
+        if (! empty($this->currentCropCode) && ($this->currentCropName === 'Cultivo' || empty($this->currentCropName))) {
+            $matchedCrop = collect($this->cropTypes)->first(fn ($c) => ($c['Code'] ?? '') === $this->currentCropCode);
+            if ($matchedCrop) {
+                $this->currentCropName = (string) ($matchedCrop['Name'] ?? 'Cultivo');
+            }
+        }
 
         $coordsStr = $m['Coordenadas'] ?? $m['U_Coordenadas'] ?? null;
         if ($coordsStr && str_contains($coordsStr, ',')) {
@@ -265,10 +340,84 @@ final class PlanWizard extends Component
             $this->coordenadasText = sprintf('Lat: %.5f, Lng: %.5f', $this->latitude, $this->longitude);
         }
 
+        // Fusión de etapas: Recomendación de catálogo + Etapas guardadas
+        $recEtapas = [];
+        if (! empty($this->currentCropCode)) {
+            try {
+                $recResp = $catalogs->getCropRecommendation($this->currentCropCode, $this->territory ?: null);
+                $recEtapas = $recResp['etapas'] ?? [];
+            } catch (\Throwable $e) {
+                Log::warning('[PlanWizard] Error al obtener recomendación para fusionar en versionado', ['error' => $e->getMessage()]);
+            }
+        }
+
         $rawEtapas = $planData['etapas'] ?? [];
-        if (! empty($rawEtapas)) {
-            $this->stages = [];
-            foreach ($rawEtapas as $st) {
+        $baseLoop = ! empty($recEtapas) ? $recEtapas : array_map(fn ($e) => [
+            'idEtapa' => $e['codeEtapa'] ?? 0,
+            'nombreEtapa' => $e['nameEtapa'] ?? '',
+        ], $rawEtapas);
+
+        $this->stages = [];
+        $processedStageIds = [];
+
+        foreach ($baseLoop as $tpl) {
+            $stageId = (int) ($tpl['idEtapa'] ?? $tpl['codeEtapa'] ?? 0);
+            $stageName = (string) ($tpl['nombreEtapa'] ?? $tpl['nameEtapa'] ?? "Etapa {$stageId}");
+            $processedStageIds[] = $stageId;
+
+            $saved = collect($rawEtapas)->first(fn ($g) => (int) ($g['codeEtapa'] ?? 0) === $stageId);
+
+            if ($saved) {
+                $prodsRaw = [];
+                if (! empty($saved['listaProductos'])) {
+                    $prodsRaw = is_string($saved['listaProductos']) ? (json_decode($saved['listaProductos'], true) ?: []) : $saved['listaProductos'];
+                }
+
+                $mappedProds = [];
+                foreach ($prodsRaw as $pr) {
+                    $pId = (string) ($pr['id'] ?? $pr['itemCode'] ?? $pr['idProducto'] ?? '');
+                    $pDose = (float) ($pr['dosis'] ?? $pr['dosePerHectare'] ?? 0.0);
+                    $foundCat = collect($this->availableProducts)->first(fn ($x) => ($x['ItemCode'] ?? $x['itemCode'] ?? '') === $pId);
+                    $mappedProds[] = [
+                        'itemCode' => $pId,
+                        'itemName' => $foundCat['ItemName'] ?? $foundCat['name'] ?? ($pr['nombre'] ?? $pr['nombreProducto'] ?? $pId),
+                        'dosePerHectare' => $pDose,
+                        'unitOfMeasure' => $foundCat['SalUnitMsr'] ?? 'Kg/Ha',
+                        'unitPrice' => (float) ($foundCat['Price'] ?? 0.0),
+                        'activeIngredient' => $foundCat['U_Det_IngActivo'] ?? ($pr['ingredienteActivo'] ?? null),
+                    ];
+                }
+
+                $appMethodVal = 'Tradicional';
+                if (! empty($saved['idAplicacion'])) {
+                    $idApp = (string) $saved['idAplicacion'];
+                    $foundMethod = collect($this->applicationMethods)->first(fn ($am) => ($am['Code'] ?? '') === $idApp);
+                    $appMethodVal = $foundMethod['Name'] ?? $idApp;
+                }
+
+                $this->stages[] = [
+                    'stageId' => $stageId,
+                    'stageName' => $stageName,
+                    'applicationMethod' => $appMethodVal,
+                    'applicationDate' => ! empty($saved['fechaAplicacion']) ? explode('T', (string) $saved['fechaAplicacion'])[0] : null,
+                    'observations' => (string) ($saved['comentario'] ?? ''),
+                    'products' => $mappedProds,
+                ];
+            } else {
+                $this->stages[] = [
+                    'stageId' => $stageId,
+                    'stageName' => $stageName,
+                    'applicationMethod' => 'Tradicional',
+                    'applicationDate' => null,
+                    'observations' => (string) ($tpl['comentario'] ?? ''),
+                    'products' => [],
+                ];
+            }
+        }
+
+        foreach ($rawEtapas as $st) {
+            $stId = (int) ($st['codeEtapa'] ?? 0);
+            if (! in_array($stId, $processedStageIds, true)) {
                 $prodsRaw = [];
                 if (! empty($st['listaProductos'])) {
                     $prodsRaw = is_string($st['listaProductos']) ? (json_decode($st['listaProductos'], true) ?: []) : $st['listaProductos'];
@@ -276,29 +425,38 @@ final class PlanWizard extends Component
 
                 $mappedProds = [];
                 foreach ($prodsRaw as $pr) {
-                    $pId = (string) ($pr['id'] ?? $pr['itemCode'] ?? '');
+                    $pId = (string) ($pr['id'] ?? $pr['itemCode'] ?? $pr['idProducto'] ?? '');
                     $pDose = (float) ($pr['dosis'] ?? $pr['dosePerHectare'] ?? 0.0);
                     $foundCat = collect($this->availableProducts)->first(fn ($x) => ($x['ItemCode'] ?? $x['itemCode'] ?? '') === $pId);
                     $mappedProds[] = [
                         'itemCode' => $pId,
-                        'itemName' => $foundCat['ItemName'] ?? $foundCat['name'] ?? $pId,
+                        'itemName' => $foundCat['ItemName'] ?? $foundCat['name'] ?? ($pr['nombre'] ?? $pr['nombreProducto'] ?? $pId),
                         'dosePerHectare' => $pDose,
                         'unitOfMeasure' => $foundCat['SalUnitMsr'] ?? 'Kg/Ha',
                         'unitPrice' => (float) ($foundCat['Price'] ?? 0.0),
-                        'activeIngredient' => $foundCat['U_Det_IngActivo'] ?? null,
+                        'activeIngredient' => $foundCat['U_Det_IngActivo'] ?? ($pr['ingredienteActivo'] ?? null),
                     ];
                 }
 
+                $appMethodVal = 'Tradicional';
+                if (! empty($st['idAplicacion'])) {
+                    $idApp = (string) $st['idAplicacion'];
+                    $foundMethod = collect($this->applicationMethods)->first(fn ($am) => ($am['Code'] ?? '') === $idApp);
+                    $appMethodVal = $foundMethod['Name'] ?? $idApp;
+                }
+
                 $this->stages[] = [
-                    'stageId' => (int) ($st['codeEtapa'] ?? 0),
-                    'stageName' => (string) ($st['nameEtapa'] ?? ''),
-                    'applicationMethod' => isset($st['idAplicacion']) ? (string) $st['idAplicacion'] : 'Tradicional',
+                    'stageId' => $stId,
+                    'stageName' => (string) ($st['nameEtapa'] ?? "Etapa {$stId}"),
+                    'applicationMethod' => $appMethodVal,
                     'applicationDate' => ! empty($st['fechaAplicacion']) ? explode('T', (string) $st['fechaAplicacion'])[0] : null,
                     'observations' => (string) ($st['comentario'] ?? ''),
                     'products' => $mappedProds,
                 ];
             }
         }
+
+        usort($this->stages, fn ($a, $b) => ($a['stageId'] ?? 0) <=> ($b['stageId'] ?? 0));
 
         $this->currentStep = 3;
     }
@@ -350,6 +508,9 @@ final class PlanWizard extends Component
             if (($c['CardCode'] ?? '') === $cardCode) {
                 if (! empty($c['Zone']) && empty($this->zone)) {
                     $this->zone = $c['Zone'];
+                }
+                if (! empty($c['Cellular'])) {
+                    $this->customerPhone = (string) $c['Cellular'];
                 }
                 break;
             }
@@ -573,77 +734,113 @@ final class PlanWizard extends Component
     public function savePlan(CreatePlanUseCase $createPlanUseCase): void
     {
         try {
-            $this->validate([
-                // Step 1
-                'customerCode' => 'required',
-                'advisorId' => 'required',
-                'parcela' => 'required',
-                'hectares' => 'required|numeric|min:0.1',
-                'soilType' => 'required',
-                'analisisSuelo' => 'required',
-                'latitude' => 'required|numeric',
-                'longitude' => 'required|numeric',
-                // Step 2
-                'previousCrop' => 'required',
-                'previousCropYield' => 'required|numeric|min:0.01',
-                'previousCropMaxYield' => 'required|numeric|min:0.01',
-                'currentCropCode' => 'required',
-                'seedVariety' => 'required|string|min:1',
-                'estimatedSowingDate' => 'required|date',
-                'targetYield' => 'required|numeric|min:0.01',
-                // Step 3
-                'stages' => 'required|array|min:1',
-                'stages.*.applicationDate' => 'required|date',
-                'stages.*.applicationMethod' => 'required|string',
-                'stages.*.observations' => 'nullable|string|max:253',
-                'stages.*.products' => 'required|array|min:1',
-                'stages.*.products.*.itemCode' => 'required|string|min:1',
-                'stages.*.products.*.dosePerHectare' => 'required|numeric|min:0.0001',
-            ], [
-                'customerCode.required' => 'El cliente es obligatorio.',
-                'advisorId.required' => 'El asesor técnico es obligatorio.',
-                'parcela.required' => 'El nombre de la parcela es obligatorio.',
-                'hectares.required' => 'La superficie es obligatoria.',
-                'soilType.required' => 'El tipo de suelo es obligatorio.',
-                'analisisSuelo.required' => 'El análisis de suelo es obligatorio.',
-                'latitude.required' => 'Selecciona un punto en el mapa para marcar la ubicación de la parcela.',
-                'longitude.required' => 'Selecciona un punto en el mapa para marcar la ubicación de la parcela.',
-                'previousCrop.required' => 'El cultivo anterior es obligatorio.',
-                'previousCropYield.required' => 'El rendimiento real es obligatorio.',
-                'previousCropYield.numeric' => 'El rendimiento real debe ser numérico.',
-                'previousCropYield.min' => 'El rendimiento real debe ser mayor a 0.',
-                'previousCropMaxYield.required' => 'El rendimiento máximo de referencia es obligatorio.',
-                'previousCropMaxYield.numeric' => 'El rendimiento máximo debe ser numérico.',
-                'previousCropMaxYield.min' => 'El rendimiento máximo debe ser mayor a 0.',
-                'currentCropCode.required' => 'El cultivo actual es obligatorio.',
-                'seedVariety.required' => 'La variedad de semilla es obligatoria.',
-                'estimatedSowingDate.required' => 'La fecha de siembra es obligatoria.',
-                'targetYield.required' => 'La meta de rendimiento es obligatoria.',
-                'targetYield.numeric' => 'La meta de rendimiento debe ser numérica.',
-                'targetYield.min' => 'La meta de rendimiento debe ser mayor a 0.',
-                'stages.required' => 'Debes definir al menos una etapa fenológica en la propuesta.',
-                'stages.min' => 'Debes definir al menos una etapa fenológica en la propuesta.',
-                'stages.*.applicationDate.required' => 'La fecha de aplicación es obligatoria.',
-                'stages.*.applicationDate.date' => 'La fecha de aplicación debe ser una fecha válida.',
-                'stages.*.applicationMethod.required' => 'El método de aplicación es obligatorio.',
-                'stages.*.observations.max' => 'Los comentarios no pueden exceder los 253 caracteres.',
-                'stages.*.products.required' => 'Cada etapa debe contener al menos un producto.',
-                'stages.*.products.min' => 'Cada etapa debe contener al menos un producto.',
-                'stages.*.products.*.itemCode.required' => 'Debes seleccionar un producto en cada fila.',
-                'stages.*.products.*.dosePerHectare.required' => 'La dosis es obligatoria.',
-                'stages.*.products.*.dosePerHectare.numeric' => 'La dosis debe ser un valor numérico.',
-                'stages.*.products.*.dosePerHectare.min' => 'La dosis debe ser mayor a 0.',
-            ]);
+            if ($this->isVersioning && ! empty($this->basePlanCode)) {
+                // Prune empty stages without products and without dates/methods (matching React shouldIncludeStage)
+                $this->stages = array_values(array_filter($this->stages, function ($st) {
+                    $hasProducts = ! empty($st['products']);
+                    $hasDate = ! empty($st['applicationDate']);
+                    $hasMethod = ! empty($st['applicationMethod']) && $st['applicationMethod'] !== 'Tradicional';
+
+                    return $hasProducts || $hasDate || $hasMethod;
+                }));
+
+                $this->validate([
+                    'stages' => 'required|array|min:1',
+                    'stages.*.applicationDate' => 'required|date',
+                    'stages.*.applicationMethod' => 'required|string',
+                    'stages.*.observations' => 'nullable|string|max:253',
+                    'stages.*.products' => 'required|array|min:1',
+                    'stages.*.products.*.itemCode' => 'required|string|min:1',
+                    'stages.*.products.*.dosePerHectare' => 'required|numeric|min:0.0001',
+                ], [
+                    'stages.required' => 'Debes definir al menos una etapa fenológica en la propuesta.',
+                    'stages.min' => 'Debes definir al menos una etapa fenológica en la propuesta.',
+                    'stages.*.applicationDate.required' => 'La fecha de aplicación es obligatoria.',
+                    'stages.*.applicationDate.date' => 'La fecha de aplicación debe ser una fecha válida.',
+                    'stages.*.applicationMethod.required' => 'El método de aplicación es obligatorio.',
+                    'stages.*.observations.max' => 'Los comentarios no pueden exceder los 253 caracteres.',
+                    'stages.*.products.required' => 'Cada etapa debe contener al menos un producto.',
+                    'stages.*.products.min' => 'Cada etapa debe contener al menos un producto.',
+                    'stages.*.products.*.itemCode.required' => 'Debes seleccionar un producto en cada fila.',
+                    'stages.*.products.*.dosePerHectare.required' => 'La dosis es obligatoria.',
+                    'stages.*.products.*.dosePerHectare.numeric' => 'La dosis debe ser un valor numérico.',
+                    'stages.*.products.*.dosePerHectare.min' => 'La dosis debe ser mayor a 0.',
+                ]);
+            } else {
+                $this->validate([
+                    // Step 1
+                    'customerCode' => 'required',
+                    'advisorId' => 'required',
+                    'parcela' => 'required',
+                    'hectares' => 'required|numeric|min:0.1',
+                    'soilType' => 'required',
+                    'analisisSuelo' => 'required',
+                    'latitude' => 'required|numeric',
+                    'longitude' => 'required|numeric',
+                    // Step 2
+                    'previousCrop' => 'required',
+                    'previousCropYield' => 'required|numeric|min:0.01',
+                    'previousCropMaxYield' => 'required|numeric|min:0.01',
+                    'currentCropCode' => 'required',
+                    'seedVariety' => 'required|string|min:1',
+                    'estimatedSowingDate' => 'required|date',
+                    'targetYield' => 'required|numeric|min:0.01',
+                    // Step 3
+                    'stages' => 'required|array|min:1',
+                    'stages.*.applicationDate' => 'required|date',
+                    'stages.*.applicationMethod' => 'required|string',
+                    'stages.*.observations' => 'nullable|string|max:253',
+                    'stages.*.products' => 'required|array|min:1',
+                    'stages.*.products.*.itemCode' => 'required|string|min:1',
+                    'stages.*.products.*.dosePerHectare' => 'required|numeric|min:0.0001',
+                ], [
+                    'customerCode.required' => 'El cliente es obligatorio.',
+                    'advisorId.required' => 'El asesor técnico es obligatorio.',
+                    'parcela.required' => 'El nombre de la parcela es obligatorio.',
+                    'hectares.required' => 'La superficie es obligatoria.',
+                    'soilType.required' => 'El tipo de suelo es obligatorio.',
+                    'analisisSuelo.required' => 'El análisis de suelo es obligatorio.',
+                    'latitude.required' => 'Selecciona un punto en el mapa para marcar la ubicación de la parcela.',
+                    'longitude.required' => 'Selecciona un punto en el mapa para marcar la ubicación de la parcela.',
+                    'previousCrop.required' => 'El cultivo anterior es obligatorio.',
+                    'previousCropYield.required' => 'El rendimiento real es obligatorio.',
+                    'previousCropYield.numeric' => 'El rendimiento real debe ser numérico.',
+                    'previousCropYield.min' => 'El rendimiento real debe ser mayor a 0.',
+                    'previousCropMaxYield.required' => 'El rendimiento máximo de referencia es obligatorio.',
+                    'previousCropMaxYield.numeric' => 'El rendimiento máximo debe ser numérico.',
+                    'previousCropMaxYield.min' => 'El rendimiento máximo debe ser mayor a 0.',
+                    'currentCropCode.required' => 'El cultivo actual es obligatorio.',
+                    'seedVariety.required' => 'La variedad de semilla es obligatoria.',
+                    'estimatedSowingDate.required' => 'La fecha de siembra es obligatoria.',
+                    'targetYield.required' => 'La meta de rendimiento es obligatoria.',
+                    'targetYield.numeric' => 'La meta de rendimiento debe ser numérica.',
+                    'targetYield.min' => 'La meta de rendimiento debe ser mayor a 0.',
+                    'stages.required' => 'Debes definir al menos una etapa fenológica en la propuesta.',
+                    'stages.min' => 'Debes definir al menos una etapa fenológica en la propuesta.',
+                    'stages.*.applicationDate.required' => 'La fecha de aplicación es obligatoria.',
+                    'stages.*.applicationDate.date' => 'La fecha de aplicación debe ser una fecha válida.',
+                    'stages.*.applicationMethod.required' => 'El método de aplicación es obligatorio.',
+                    'stages.*.observations.max' => 'Los comentarios no pueden exceder los 253 caracteres.',
+                    'stages.*.products.required' => 'Cada etapa debe contener al menos un producto.',
+                    'stages.*.products.min' => 'Cada etapa debe contener al menos un producto.',
+                    'stages.*.products.*.itemCode.required' => 'Debes seleccionar un producto en cada fila.',
+                    'stages.*.products.*.dosePerHectare.required' => 'La dosis es obligatoria.',
+                    'stages.*.products.*.dosePerHectare.numeric' => 'La dosis debe ser un valor numérico.',
+                    'stages.*.products.*.dosePerHectare.min' => 'La dosis debe ser mayor a 0.',
+                ]);
+            }
         } catch (ValidationException $e) {
             $errors = $e->validator->errors();
             Log::warning('[PlanWizard] Validación fallida al guardar plan', [
                 'errors' => $errors->toArray(),
             ]);
 
-            if ($errors->hasAny(['customerCode', 'advisorId', 'parcela', 'hectares', 'soilType', 'analisisSuelo', 'latitude', 'longitude'])) {
-                $this->currentStep = 1;
-            } elseif ($errors->hasAny(['previousCrop', 'previousCropYield', 'previousCropMaxYield', 'currentCropCode', 'seedVariety', 'estimatedSowingDate', 'targetYield'])) {
-                $this->currentStep = 2;
+            if (! $this->isVersioning) {
+                if ($errors->hasAny(['customerCode', 'advisorId', 'parcela', 'hectares', 'soilType', 'analisisSuelo', 'latitude', 'longitude'])) {
+                    $this->currentStep = 1;
+                } elseif ($errors->hasAny(['previousCrop', 'previousCropYield', 'previousCropMaxYield', 'currentCropCode', 'seedVariety', 'estimatedSowingDate', 'targetYield'])) {
+                    $this->currentStep = 2;
+                }
             }
 
             throw $e;
@@ -686,8 +883,15 @@ final class PlanWizard extends Component
                     }
 
                     $idApp = null;
-                    if (! empty($st['applicationMethod']) && is_numeric($st['applicationMethod'])) {
-                        $idApp = (int) $st['applicationMethod'];
+                    if (! empty($st['applicationMethod'])) {
+                        if (is_numeric($st['applicationMethod'])) {
+                            $idApp = (int) $st['applicationMethod'];
+                        } else {
+                            $matchedMethod = collect($this->applicationMethods)->first(fn ($am) => ($am['Name'] ?? '') === $st['applicationMethod'] || ($am['Code'] ?? '') === $st['applicationMethod']);
+                            if ($matchedMethod && isset($matchedMethod['Code']) && is_numeric($matchedMethod['Code'])) {
+                                $idApp = (int) $matchedMethod['Code'];
+                            }
+                        }
                     }
 
                     $etapasArray[] = [
@@ -716,7 +920,7 @@ final class PlanWizard extends Component
 
                 $this->newVersion = (int) ($versionResult['version'] ?? ($this->baseVersion + 1));
                 $this->savedPlanCode = $this->basePlanCode;
-                $this->savedPlanMessage = "Nueva versión V{$this->newVersion} para el plan {$this->basePlanCode}";
+                $this->savedPlanMessage = "{$this->basePlanCode} - Plan {$this->parcela} - {$this->customerCode}";
                 $this->successMessage = "¡Se ha creado la versión V{$this->newVersion} del plan {$this->basePlanCode} exitosamente!";
 
                 try {
@@ -740,6 +944,10 @@ final class PlanWizard extends Component
 
             $targetYieldVal = $this->targetYield ?? $this->currentCropTargetYield;
             $hasSoilAnalysis = strtoupper((string) $this->analisisSuelo) === 'SI';
+
+            $authUser = session('authenticated_user');
+            $salesAdvisorId = (string) ($authUser?->id ?? '');
+            $salesAdvisorName = (string) ($authUser?->name ?? 'Asesor Comercial');
 
             $dto = new CreatePlanDTO(
                 customerCode: $this->customerCode,
@@ -765,6 +973,8 @@ final class PlanWizard extends Component
                 estimatedSowingDate: $this->estimatedSowingDate,
                 targetYield: $targetYieldVal ? (float) $targetYieldVal : null,
                 stages: $this->stages,
+                salesAdvisorId: $salesAdvisorId,
+                salesAdvisorName: $salesAdvisorName,
             );
 
             Log::info('[PlanWizard] Ejecutando CreatePlanUseCase', [
@@ -844,6 +1054,23 @@ final class PlanWizard extends Component
 
         $planMessage = $this->savedPlanMessage ?: ($this->savedPlanCode ? "{$this->savedPlanCode} - Plan {$this->parcela} - {$this->customerCode}" : "Plan {$this->parcela} - {$this->customerCode}");
 
+        $advisorDisplay = $this->advisorName;
+        if (str_contains($advisorDisplay, '@')) {
+            $prefix = explode('@', $advisorDisplay)[0];
+            $words = preg_split('/[._-]/', $prefix);
+            $advisorDisplay = ucwords(implode(' ', array_filter($words ?: [$prefix])));
+        }
+
+        $salesAdvisorDisplay = (string) (session('authenticated_user')?->name ?? '');
+        if (str_contains($salesAdvisorDisplay, '@')) {
+            $prefix = explode('@', $salesAdvisorDisplay)[0];
+            $words = preg_split('/[._-]/', $prefix);
+            $salesAdvisorDisplay = ucwords(implode(' ', array_filter($words ?: [$prefix])));
+        }
+        if (empty($salesAdvisorDisplay)) {
+            $salesAdvisorDisplay = 'Asesor Comercial';
+        }
+
         return [
             // General
             'planCode' => (string) ($this->savedPlanCode ?? 'PF-NUEVO'),
@@ -856,11 +1083,13 @@ final class PlanWizard extends Component
             'productor' => $this->customerName,
             'CardName' => $this->customerName,
             'CardCode' => $this->customerCode,
-            'advisorName' => $this->advisorName,
-            'asesorVentas' => $this->advisorName,
-            'asesorTecnico' => $this->advisorName,
-            'tecnicoCampo' => $this->advisorName,
-            'SlpName' => $this->advisorName,
+            'advisorName' => $advisorDisplay ?: 'Asesor Agronómico',
+            'asesorVentas' => $salesAdvisorDisplay,
+            'AsesorVentasName' => $salesAdvisorDisplay,
+            'asesorTecnico' => $advisorDisplay ?: 'Asesor Técnico',
+            'AsesorTecnicoName' => $advisorDisplay ?: 'Asesor Técnico',
+            'tecnicoCampo' => $advisorDisplay ?: 'Asesor Técnico',
+            'SlpName' => $salesAdvisorDisplay,
             'advisorId' => $this->advisorId,
             'territorio' => $this->territory ?: 'N/D',
             'Territorio' => $this->territory ?: 'N/D',
@@ -958,14 +1187,32 @@ final class PlanWizard extends Component
         }
     }
 
+    public function getIsCustomerPhoneMissingProperty(): bool
+    {
+        $phone = preg_replace('/[^0-9]/', '', (string) $this->customerPhone);
+
+        return strlen($phone) < 10;
+    }
+
+    public function getSoilTypeNameProperty(): string
+    {
+        if (empty($this->soilType)) {
+            return 'No especificado';
+        }
+
+        $matched = collect($this->soilTypes)->first(fn ($s) => (string) ($s['Code'] ?? $s['code'] ?? '') === (string) $this->soilType);
+
+        return $matched['Name'] ?? $matched['name'] ?? 'Tipo '.$this->soilType;
+    }
+
     public function shareViaWhatsApp(
         DomPdfService $pdfService,
         SendPlanWhatsAppUseCase $whatsAppUseCase,
         FertilizationPlanRepositoryInterface $planRepository
     ): void {
-        $phone = preg_replace('/[^0-9]/', '', (string) $this->advisorPhone);
+        $phone = preg_replace('/[^0-9]/', '', (string) $this->customerPhone);
         if (strlen($phone) < 10) {
-            $this->whatsAppError = 'El asesor técnico seleccionado no tiene un número de teléfono configurado.';
+            $this->whatsAppError = 'No se puede compartir: El cliente no cuenta con número celular registrado en SAP.';
 
             return;
         }
@@ -981,7 +1228,7 @@ final class PlanWizard extends Component
 
             $fileName = sprintf('Plan_Fertilizacion_%s.pdf', $this->customerName ?: 'Cliente');
             $customMessage = sprintf(
-                "🌱 *Plan de Fertilización disponible* 🌱\nHola Asesor 👋\n\nTe compartimos el Plan de Fertilización del cliente *%s* (Folio: *%s*) para tu revisión y validación técnica.\n\n📄 Adjunto encontrarás el documento con las recomendaciones agronómicas. Por favor revísalo y compártenos tus observaciones o confirmación para continuar con el siguiente paso.\n\n¡Gracias por tu apoyo! 🌾",
+                "🌱 *¡Tu Plan de Fertilización está listo!* 🌱\n\nHola 👋\nTe compartimos tu Plan de Fertilización para *%s* (Folio: *%s*).\n\n📄 Adjunto encontrarás el documento con las recomendaciones agronómicas.\n\n¡Estamos a tus órdenes! 🌾",
                 $this->customerName ?: 'Cliente',
                 $this->savedPlanCode ?? 'N/A'
             );
@@ -997,12 +1244,12 @@ final class PlanWizard extends Component
             $result = $whatsAppUseCase->execute($dto);
 
             if (! empty($result['success'])) {
-                $this->whatsAppSuccess = $result['message'] ?? 'Plan enviado al asesor técnico exitosamente.';
+                $this->whatsAppSuccess = $result['message'] ?? 'Plan enviado al cliente exitosamente.';
 
                 if ($this->savedPlanCode) {
                     $planRepository->savePlanPdf(
                         planCode: (string) $this->savedPlanCode,
-                        version: 1,
+                        version: $this->isVersioning ? $this->newVersion : 1,
                         status: 'Activo',
                         base64File: $base64
                     );
@@ -1021,7 +1268,7 @@ final class PlanWizard extends Component
     public function closeSuccessModal(): void
     {
         $this->showSuccessModal = false;
-        $this->redirect(route('dashboard'));
+        $this->redirect($this->isVersioning ? route('seguimiento.index') : route('dashboard'));
     }
 
     public function closeErrorModal(): void

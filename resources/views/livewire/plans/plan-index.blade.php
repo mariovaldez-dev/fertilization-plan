@@ -295,7 +295,7 @@
                     <div class="pt-4 mt-2 flex items-center justify-between gap-2">
                         <div class="flex items-center gap-1.5">
                             <!-- Proposal PDF Modal Button -->
-                            <button wire:click="$dispatch('open-proposal-pdf', { planCode: '{{ $p->planCode }}', version: {{ $p->version }}, customerName: '{{ addslashes($p->customerName) }}' })" class="p-2.5 rounded-xl text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-500/10 transition-colors" title="Ver Propuesta PDF">
+                            <button wire:click="$dispatch('open-proposal-pdf', { planCode: '{{ $p->planCode }}', version: {{ $p->version }}, customerName: '{{ addslashes($p->customerName) }}', customerCode: '{{ $p->customerCode }}' })" class="p-2.5 rounded-xl text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-500/10 transition-colors" title="Ver Propuesta PDF">
                                 <i class="fa-solid fa-file-pdf text-sm"></i>
                             </button>
 
@@ -338,7 +338,7 @@
 
     <!-- Cancel / Close Plan Modal -->
     @if($isCancelModalOpen)
-        <div class="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" x-cloak>
+        <div class="fixed inset-0 z-50 overflow-y-auto bg-black/60 flex items-center justify-center p-4" x-cloak>
             <div class="relative w-full max-w-md bg-white dark:bg-[#131B20] rounded-3xl border border-gray-100 dark:border-white/10 shadow-2xl p-6 lg:p-8 space-y-6">
                 <div class="text-center space-y-2">
                     <div class="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-xl">

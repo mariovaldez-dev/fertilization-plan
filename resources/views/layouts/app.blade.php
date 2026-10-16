@@ -124,6 +124,22 @@
             font-weight: 600 !important;
             padding: 0.65rem 1.5rem !important;
         }
+
+        /* Table Skeleton styling: Responsive Table vs Mobile Cards */
+        tbody.table-skeleton-group.hidden {
+            display: none !important;
+        }
+        @media (min-width: 768px) {
+            tbody.table-skeleton-group {
+                display: table-row-group !important;
+            }
+            tbody.table-skeleton-group tr {
+                display: table-row !important;
+            }
+            tbody.table-skeleton-group td {
+                display: table-cell !important;
+            }
+        }
     </style>
     
     <!-- SweetAlert2 CDN -->
